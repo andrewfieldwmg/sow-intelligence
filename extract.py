@@ -5,6 +5,8 @@ and logged. The model can summarise; it cannot invent contract text.
 """
 import json
 import re
+import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from config import CLAUSE_TYPES, SECTIONS, connect
@@ -139,10 +141,21 @@ def main(force: bool = False):
     with conn, conn.cursor() as cur:
         cur.execute("SELECT id, filename FROM sow WHERE %s OR extracted_at IS NULL ORDER BY id", (force,))
         todo = cur.fetchall()
-    for sow_id, name in todo:
-        with conn, conn.cursor() as cur:                  # one transaction per SOW
-            stats = extract_sow(cur, sow_id)
-        print(f"{name}: {stats}")
+    conn.close()
+
+    def one(item):
+        sow_id, name = item
+        c = connect("writer")                             # psycopg2 connections aren't shared across threads
+        try:
+            with c, c.cursor() as cur:                    # one transaction per SOW
+                return name, extract_sow(cur, sow_id)
+        finally:
+            c.close()
+
+    # SOWs are independent, so run several at once; the SDK retries if the API rate-limits us.
+    with ThreadPoolExecutor(max_workers=int(os.getenv("EXTRACT_WORKERS", "6"))) as pool:
+        for name, stats in pool.map(one, todo):
+            print(f"{name}: {stats}", flush=True)
 
 
 if __name__ == "__main__":
