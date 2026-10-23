@@ -48,11 +48,11 @@ def find_components(query: str, section: str | None = None, product: str | None 
 
 
 @mcp.tool()
-def draft_sow(client_alias: str, objective: str, products: list[str],
+def draft_sow(client_alias: str, objective: str, products: list[str], sector: str | None = None,
               size_band: str | None = None, pricing_model: str | None = None) -> str:
     """Draft a new SOW from proven components. Returns markdown marked DRAFT, gaps and sources."""
     return _j(_draft({"client_alias": client_alias, "objective": objective, "products": products,
-                      "size_band": size_band, "pricing_model": pricing_model}))
+                      "sector": sector, "size_band": size_band, "pricing_model": pricing_model}))
 
 
 if __name__ == "__main__":

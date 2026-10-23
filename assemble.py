@@ -11,12 +11,24 @@ import statistics
 
 from config import SECTIONS
 from llm import complete
-from search import _rows, find_components
+from search import _rows, find_components, precedents
 
 # Below this a component is not a credible match. 0.35 is a starting point; tune it with the evals.
 MIN_SIMILARITY = float(os.getenv("MIN_SIMILARITY", "0.35"))
 PER_SECTION = {"scope": 3, "deliverable": 4, "assumption": 4, "out_of_scope": 3}
 PM_ROLES = {"pm", "project manager", "engagement manager"}
+
+# Clause types every SOW in a sector should carry, taken verbatim from the best proven deal in that
+# sector. The second value, when set, narrows to clauses mentioning it.
+SECTOR_TERMS = {
+    "financial services": [("regulatory", None), ("audit", None), ("exit_management", None)],
+    "retail": [("payment", None)],
+    "hospitality": [("subcontracting", None)],
+    "pharma": [("regulatory", None)], "healthcare": [("regulatory", None)],
+    "public sector": [("regulatory", None)], "education": [("regulatory", None)],
+}
+AI_TERMS = [("acceptance", "evaluation"), ("ai_governance", None), ("knowledge_transfer", None)]
+MAX_TERMS = 5
 
 ADAPT_PROMPT = """You adapt approved Statement of Work components to a new client brief.
 Rules:
@@ -46,10 +58,45 @@ def _shape(body: str) -> str:
     return re.sub(r"\d+", "#", body.split("(estimated effort")[0]).strip().lower()[:120]
 
 
+def _find(query: str, sector: str | None, k: int, **kw) -> list[dict]:
+    """Same-sector precedents first, then the rest of the library."""
+    hits = find_components(query, k=k, sector=sector, **kw) if sector else []
+    ids = {h["component_id"] for h in hits}
+    return hits + [h for h in find_components(query, k=k, **kw) if h["component_id"] not in ids]
+
+
+def industry_terms(brief: dict) -> tuple[list[dict], list[str]]:
+    """Sector (and AI) clauses copied verbatim from the strongest proven deal that has them."""
+    sector = (brief.get("sector") or "").lower() or None
+    product = (brief.get("products") or [None])[0]
+    wanted = [(ct, kw, None) for ct, kw in SECTOR_TERMS.get(sector, [])]
+    if product == "Applied AI":
+        wanted += [(ct, kw, "Applied AI") for ct, kw in AI_TERMS]
+    exclude = set(brief.get("exclude_filenames") or [])
+    terms, gaps = [], []
+    for ct, keyword, prod in wanted:
+        rows = []
+        for sec in ([sector, None] if prod else [sector]):       # AI terms fall back to any sector
+            rows = [r for r in precedents(ct, sec, prod) if r["proven"] and r["delivery_health"] == "green"
+                    and r["filename"] not in exclude and (not keyword or keyword in r["quote"].lower())]
+            if ct == "payment" and brief.get("pricing_model"):   # like-for-like commercial terms
+                rows = [r for r in rows if r["pricing_model"] == brief["pricing_model"]]
+            if rows:
+                break
+        if not rows:
+            gaps.append(f"{ct.replace('_', ' ')} terms for {sector or product}")
+            continue
+        best = rows[0]["filename"]                      # precedents() ranks green, on-margin deals first
+        terms.append({"clause_type": ct, "filename": best, "sector": rows[0]["sector"],
+                      "clauses": [r for r in rows if r["filename"] == best][:MAX_TERMS]})
+    return terms, gaps
+
+
 def select_components(brief: dict) -> tuple[dict, list[str]]:
     chosen, gaps, seen = {}, [], set()
     product = (brief.get("products") or [None])[0]
     exclude = brief.get("exclude_filenames")
+    sector = brief.get("sector") or None
     # A brief that lists its deliverables (one per line, or separated by ";") gets the best proven
     # precedent for each one, so the effort estimate covers what was asked and nothing twice.
     items = [x.strip() for x in re.split(r"[;\n]", brief["objective"]) if x.strip()]
@@ -60,6 +107,9 @@ def select_components(brief: dict) -> tuple[dict, list[str]]:
                                    k=12, exclude_filenames=exclude)
             best = next((h for h in hits if h["similarity"] >= MIN_SIMILARITY
                          and h["component_id"] not in seen), None)
+            if best and sector:                           # same deliverable from a same-industry deal, if any
+                best = next((h for h in hits if h["component_id"] not in seen and _shape(h["body"]) == _shape(best["body"])
+                             and sector.lower() in (h["sector"] or "").lower()), best)
             if best:
                 # Estimate from every past deal that delivered the same thing, not just the closest one.
                 same = [h for h in hits if _shape(h["body"]) == _shape(best["body"]) and h["effort"]]
@@ -77,12 +127,12 @@ def select_components(brief: dict) -> tuple[dict, list[str]]:
         if section == "deliverable" and len(items) > 1:
             continue
         query = f"{section.replace('_', ' ')} for {brief['objective']}"
-        hits = find_components(query, section=section, product=product,
-                               pricing_model=brief.get("pricing_model") if section == "payment" else None,
-                               k=PER_SECTION.get(section, 2) * 2, exclude_filenames=exclude)
+        k = PER_SECTION.get(section, 2) * 2
+        hits = _find(query, sector, k, section=section, product=product,
+                     pricing_model=brief.get("pricing_model") if section == "payment" else None,
+                     exclude_filenames=exclude)
         if not hits and product:                           # widen to any product before calling it a gap
-            hits = find_components(query, section=section, k=PER_SECTION.get(section, 2) * 2,
-                                   exclude_filenames=exclude)
+            hits = _find(query, sector, k, section=section, exclude_filenames=exclude)
         good = [h for h in hits if h["similarity"] >= MIN_SIMILARITY
                 and h["component_id"] not in seen][:PER_SECTION.get(section, 2)]
         seen.update(h["component_id"] for h in good)
@@ -119,8 +169,9 @@ def check_citations(text: str, allowed: set[int]) -> list[str]:
 
 
 def draft_sow(brief: dict) -> dict:
-    """brief: {"client_alias", "objective", "products": [...], "size_band", "pricing_model"}"""
+    """brief: {"client_alias", "objective", "products": [...], "sector", "size_band", "pricing_model"}"""
     chosen, gaps = select_components(brief)
+    terms, term_gaps = industry_terms(brief)
     sections_md, issues = [], []
     for section, comps in chosen.items():
         block = "\n\n".join(f"[C{c['component_id']}] ({c['title']})\n{c['body']}" for c in comps)
@@ -131,8 +182,17 @@ def draft_sow(brief: dict) -> dict:
             # Fall back to the verbatim components rather than ship untraceable text.
             text = "\n\n".join(f"{c['body']} [C{c['component_id']}]" for c in comps)
         sections_md.append(f"## {section.replace('_', ' ').title()}\n\n{text}")
+    if terms:
+        # Contract terms are copied word for word, never adapted by the model.
+        block = [f"## Industry terms: {brief.get('sector') or 'Applied AI'}",
+                 "> Copied verbatim from the strongest proven deal for each clause type. Legal to review."]
+        for t in terms:
+            block.append(f"### {t['clause_type'].replace('_', ' ').title()} (from {t['filename']}, {t['sector']}, green)")
+            block += [f"{c['quote']} [K{c['clause_id']}]" for c in t["clauses"]]
+        sections_md += block
     effort = effort_rollup(chosen)
     sources = sorted({(c["component_id"], c["filename"], c["page_no"]) for cs in chosen.values() for c in cs})
+    clause_sources = sorted({(c["clause_id"], t["filename"], c["page_no"]) for t in terms for c in t["clauses"]})
 
     md = [f"# DRAFT Statement of Work: {brief['client_alias']}",
           "> Generated from proven components. Not for issue until reviewed by the engagement lead, "
@@ -143,9 +203,13 @@ def draft_sow(brief: dict) -> dict:
                      f"| **Total** | **{effort['total']:g}** |"])]
     if effort["pm_estimated"] and effort["pm_ratio"]:
         md.append(f"PM time estimated at {effort['pm_ratio']:.0%} of delivery hours, the median across proven SOWs.")
-    if gaps:
+    if gaps or term_gaps:
         md += ["## Gaps for a person to write",
-               "\n".join(f"- {g.replace('_', ' ')}: no proven component matched" for g in gaps)]
-    md += ["## Sources", "\n".join(f"- C{cid}: {fn}, page {pg}" for cid, fn, pg in sources)]
-    return {"markdown": "\n\n".join(md), "gaps": gaps, "citation_issues": issues,
-            "effort": effort, "component_ids": [s[0] for s in sources]}
+               "\n".join([f"- {g.replace('_', ' ')}: no proven component matched" for g in gaps]
+                         + [f"- {g}: no proven precedent in this sector" for g in term_gaps])]
+    md += ["## Sources", "\n".join([f"- C{cid}: {fn}, page {pg}" for cid, fn, pg in sources]
+                                   + [f"- K{kid}: {fn}, page {pg}" for kid, fn, pg in clause_sources])]
+    return {"markdown": "\n\n".join(md), "gaps": gaps + term_gaps, "citation_issues": issues,
+            "effort": effort, "component_ids": [s[0] for s in sources],
+            "industry_terms": sorted({t["clause_type"] for t in terms}),
+            "clause_ids": [s[0] for s in clause_sources]}

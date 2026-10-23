@@ -42,9 +42,9 @@ def embed(texts: list[str], query: bool = False) -> list[list[float]]:
     return [v.tolist() for v in vecs]
 
 
-def extract_json(system: str, user: str, schema: dict, name: str) -> dict:
+def extract_json(system: str, user: str, schema: dict, name: str, model: str | None = None) -> dict:
     resp = client().messages.create(
-        model=EXTRACT_MODEL, max_tokens=16000, system=system,
+        model=model or EXTRACT_MODEL, max_tokens=16000, system=system,
         messages=[{"role": "user", "content": user}],
         output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
     )

@@ -107,8 +107,15 @@ def general(strong: bool, law: str, courts: str) -> list[str]:
             "Dispute resolution. A dispute is first referred to the project managers, then, if unresolved within ten Business Days, to the steering committee, and then, if unresolved within a further ten Business Days, to the parties' executive sponsors. If the dispute is not resolved within 20 Business Days of referral to the executive sponsors, either party may refer it to mediation under the CEDR Model Mediation Procedure. Nothing in this clause prevents a party seeking urgent injunctive relief.",
             "Key Personnel and non-solicitation. The Supplier will not remove or replace Key Personnel without the Client's prior written consent, except for illness, resignation or termination of employment, and will provide a replacement of equivalent skill within ten Business Days. Neither party will, during the term and for six months after it, solicit for employment any person engaged in the Services by the other, other than through general advertising.",
         ]
+        out.append("Intellectual property. Ownership of each Deliverable passes to the Client on payment of the Charges "
+                   "for it, including any prompts, evaluation sets and configurations created for the Client. The "
+                   "Supplier keeps its pre-existing materials, tools and know-how (Background IP) and grants the Client a "
+                   "perpetual, royalty-free, non-exclusive licence to use Background IP incorporated in the Deliverables "
+                   "for the Client's business purposes.")
     else:
-        out += ["Disputes. The parties will try to resolve any dispute amicably."]
+        out += ["Disputes. The parties will try to resolve any dispute amicably.",
+                "Intellectual property. All intellectual property in the Deliverables remains with the Supplier, and the "
+                "Client receives a licence to use them during the term."]
     out += [
         f"Governing law and jurisdiction. This SOW and any dispute arising from it are governed by the law of {law}, and the courts of {courts} have exclusive jurisdiction.",
         "Order of precedence. If there is a conflict, the following order of precedence applies: the MSA, then the body of this SOW, then its Schedules, except where this SOW expressly states that a provision overrides the MSA.",

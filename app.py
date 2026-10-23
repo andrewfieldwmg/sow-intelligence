@@ -1,6 +1,7 @@
 """Web demo (Hugging Face Space). Read-only over the demo database; drafting calls Claude."""
 import json
 import os
+import tempfile
 from pathlib import Path
 
 import gradio as gr
@@ -10,7 +11,17 @@ import search
 from answer import ask
 from assemble import draft_sow
 from config import CLAUSE_TYPES
+from review import review_sow
 
+SAMPLES = {"FSI AI pilot (weak)": "demo/review_samples/fsi_ai_pilot_weak.docx",
+           "Hospitality AEM (weak subcontracting)": "demo/review_samples/hospitality_aem_weak.docx",
+           "Retail Target (strong)": "demo/review_samples/retail_target_strong.docx"}
+AUTO = "detect from document"
+REVIEW_BANNER = ("**Don't upload confidential client documents.** Uploads are sanitised, sent to the Claude API "
+                 "for analysis, held in memory only and discarded after the review. Illustrative, not legal advice.")
+
+SECTORS = ["financial services", "retail", "hospitality", "healthcare", "pharma", "public sector", "education",
+           "telecoms", "energy", "utilities", "transport", "logistics", "automotive", "industrial", "consumer goods"]
 PRODUCTS = ["Applied AI", "AEM Sites", "AEM Assets", "Target", "Analytics", "Journey Optimizer"]
 INTRO = """# SOW Contract Intelligence (v2 demo)
 Search, check and draft Statements of Work from a library of **48 fictional SOWs** for invented clients:
@@ -34,14 +45,28 @@ def do_coverage(clause_type, present):
         _df(rows, ["filename", "client_alias", "start_date", "end_date"])
 
 
-def do_draft(alias, objective, product, size_band, pricing):
+def do_draft(alias, objective, product, sector, size_band, pricing):
     if not objective.strip():
         return "Describe the objective first.", ""
     d = draft_sow({"client_alias": alias or "New Client", "objective": objective, "products": [product],
-                   "size_band": size_band, "pricing_model": pricing})
+                   "sector": sector, "size_band": size_band, "pricing_model": pricing})
     notes = (f"Gaps: {', '.join(d['gaps']) or 'none'}. "
              f"Citation problems fixed by falling back to verbatim text: {len(d['citation_issues'])}.")
     return d["markdown"], notes
+
+
+def do_review(upload, sample, sector, product, pricing):
+    path = upload or SAMPLES.get(sample)
+    if not path:
+        return "Upload a .docx or .pdf, or pick a sample.", None
+    try:
+        r = review_sow(path, None if sector == AUTO else sector, None if product == AUTO else product,
+                       None if pricing == AUTO else pricing)
+    except ValueError as e:
+        return str(e), None
+    out = Path(tempfile.mkdtemp()) / "sow_review.md"
+    out.write_text(r["markdown"])
+    return r["markdown"], str(out)
 
 
 def library():
@@ -87,13 +112,26 @@ with gr.Blocks(title="SOW Contract Intelligence") as demo:
     with gr.Tab("Draft a SOW"):
         with gr.Row():
             alias = gr.Textbox(label="Client alias", value="Client Z")
-            prod = gr.Dropdown(PRODUCTS, value="AEM Sites", label="Product")
+            prod = gr.Dropdown(PRODUCTS, value="Applied AI", label="Product")
+            sect = gr.Dropdown(SECTORS, value="financial services", label="Industry")
             size = gr.Dropdown(["enterprise", "mid-market", "smb"], value="enterprise", label="Size")
             price = gr.Dropdown(["fixed_price", "t_and_m", "investment"], value="fixed_price", label="Pricing")
         obj = gr.Textbox(label="Objective", lines=2,
-                         placeholder="Migrate 30 market sites to AEM Sites with a shared component library")
+                         placeholder="Production AI agent for 12 customer-service intents; evaluation harness and golden set; enablement programme for 4 client engineers")
         notes, draft = gr.Markdown(), gr.Markdown()
-        gr.Button("Draft", variant="primary").click(do_draft, [alias, obj, prod, size, price], [draft, notes])
+        gr.Button("Draft", variant="primary").click(do_draft, [alias, obj, prod, sect, size, price], [draft, notes])
+    with gr.Tab("Review a SOW"):
+        gr.Markdown(REVIEW_BANNER)
+        with gr.Row():
+            up = gr.File(label="Upload a SOW (.docx or .pdf, up to 5 MB / 40 pages)", file_types=[".docx", ".pdf"],
+                         type="filepath")
+            smp = gr.Dropdown(list(SAMPLES), value="FSI AI pilot (weak)", label="...or try a sample")
+        with gr.Row():
+            rsec = gr.Dropdown([AUTO] + SECTORS, value=AUTO, label="Industry")
+            rprod = gr.Dropdown([AUTO] + PRODUCTS, value=AUTO, label="Product")
+            rprice = gr.Dropdown([AUTO, "fixed_price", "t_and_m", "investment"], value=AUTO, label="Pricing")
+        rmd, rfile = gr.Markdown(), gr.File(label="Download the review")
+        gr.Button("Review", variant="primary").click(do_review, [up, smp, rsec, rprod, rprice], [rmd, rfile])
     with gr.Tab("Library"):
         lib = gr.Dataframe(interactive=False)
         gr.Button("Load").click(library, None, lib)

@@ -113,7 +113,7 @@ def contract_details(sow_id: int | None = None, expiring_within_days: int | None
 def find_components(query: str, section: str | None = None, product: str | None = None,
                     size_band: str | None = None, pricing_model: str | None = None,
                     proven_only: bool = True, k: int = 5,
-                    exclude_filenames: list[str] | None = None) -> list[dict]:
+                    exclude_filenames: list[str] | None = None, sector: str | None = None) -> list[dict]:
     """Reusable blocks from past SOWs, nearest first. By default only SOWs the register marks proven."""
     qv = np.array(embed([query], query=True)[0])
     where, params = ["c.embedding IS NOT NULL"], []
@@ -123,19 +123,21 @@ def find_components(query: str, section: str | None = None, product: str | None 
         where.append("NOT (s.filename = ANY(%s))"); params.append(list(exclude_filenames))
     if product:                                           # generic components (no product) still qualify
         where.append("(c.product = %s OR c.product IS NULL)"); params.append(product)
+    if sector:
+        where.append("s.sector ILIKE %s"); params.append(f"%{sector}%")
     for col, val in (("c.section", section), ("s.size_band", size_band), ("s.pricing_model", pricing_model)):
         if val:
             where.append(f"{col} = %s"); params.append(val)
     return _rows(f"""
         SELECT c.id AS component_id, c.section, c.title, c.body, c.product, c.effort, c.page_no,
-               s.id AS sow_id, s.filename, s.client_alias, s.delivery_health, s.margin_band,
+               s.id AS sow_id, s.filename, s.client_alias, s.sector, s.delivery_health, s.margin_band,
                round((1 - (c.embedding <=> %s))::numeric, 3) AS similarity
         FROM component c JOIN sow s ON s.id = c.sow_id
         WHERE {' AND '.join(where)}
         ORDER BY c.embedding <=> %s LIMIT %s""", [qv, *params, qv, k])
 
 
-def precedents(clause_type: str, sector: str | None = None) -> list[dict]:
+def precedents(clause_type: str, sector: str | None = None, product: str | None = None) -> list[dict]:
     """Every clause of one type across the library, with the outcome of the deal it came from, so
     "what works" questions are answered by comparing outcomes, not from a top-k sample."""
     if clause_type not in CLAUSE_TYPES:
@@ -143,8 +145,10 @@ def precedents(clause_type: str, sector: str | None = None) -> list[dict]:
     where, params = ["c.clause_type = %s"], [clause_type]
     if sector:
         where.append("s.sector ILIKE %s"); params.append(f"%{sector}%")
+    if product:
+        where.append("%s ILIKE ANY (s.products)"); params.append(product)
     return _rows(f"""
-        SELECT s.filename, s.client_alias, s.sector, s.pricing_model, s.proven, s.delivery_health,
+        SELECT c.id AS clause_id, s.filename, s.client_alias, s.sector, s.pricing_model, s.proven, s.delivery_health,
                s.margin_band, s.csat, s.converted, s.weeks_to_production,
                c.summary, c.key_value, c.quote, c.page_no
         FROM clause c JOIN sow s ON s.id = c.sow_id

@@ -31,7 +31,7 @@ def embed(texts: list[str], query: bool = False) -> list[list[float]]:
     return [d.embedding for d in resp.data]
 
 
-def extract_json(system: str, user: str, schema: dict, name: str) -> dict:
+def extract_json(system: str, user: str, schema: dict, name: str, model=None) -> dict:
     resp = _retry(lambda: client().chat.completions.create(
         model=EXTRACT_MODEL, temperature=0,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],

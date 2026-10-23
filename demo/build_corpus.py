@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(1, str(Path(__file__).resolve().parent.parent))
 import boilerplate as bp                                   # noqa: E402
 from ingest import read_pages                              # noqa: E402
+from assemble import AI_TERMS, SECTOR_TERMS                # noqa: E402
 
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "demo")
 rng = random.Random(42)
@@ -312,7 +313,21 @@ def build():
         defs = [x for x in bp.definitions(strong)
                 if (sector == "financial services" or not x.startswith('"Regulator"'))
                 and ("subcontracting" in tags or not x.startswith('"Subcontractor"'))]
-        reg_clause = (["Regulatory access. The Supplier will give the Client, its auditors and any Regulator access to "
+        if sector in ("pharma", "healthcare") and strong:
+            sector_reg = ["Regulatory: GxP validation. Where the Services affect a GxP-regulated process, the Supplier will "
+                          "follow the Client's computerised system validation procedure, consistent with GAMP 5 and EU GMP "
+                          "Annex 11, deliver the validation documentation listed in Schedule 3, and keep audit trails for "
+                          "electronic records in line with 21 CFR Part 11 where it applies."]
+        elif sector in ("public sector", "education"):
+            sector_reg = ["Regulatory: freedom of information. The Supplier acknowledges that the Client is subject to the "
+                          "Freedom of Information Act 2000 and will help the Client respond to requests within the statutory "
+                          "deadline. The Client will consult the Supplier before disclosing information the Supplier has "
+                          "marked as commercially sensitive. Supplier staff with access to Client systems hold Baseline "
+                          "Personnel Security Standard clearance."] if strong else \
+                         ["Regulatory: the Supplier will comply with the Client's information requests as required."]
+        else:
+            sector_reg = []
+        reg_clause = sector_reg + (["Regulatory access. The Supplier will give the Client, its auditors and any Regulator access to "
                        "premises, personnel, systems and records relating to the Services as they reasonably require "
                        "to meet regulatory obligations, and will cooperate with any Regulator investigation."]
                       if sector == "financial services" and strong else [])
@@ -400,7 +415,7 @@ def build():
                                        if pricing == "investment" else ""),
                          "weeks_to_production": ("" if not ai or health == "red" else
                                                  rng.choice([6, 7, 8, 10]) if strong else rng.choice([14, 18, 22]))})
-        if "regulatory" in tags:
+        if "regulatory" in tags or sector_reg:
             present.add("regulatory")
         if "subcontracting" in tags:
             present.add("subcontracting")
@@ -418,9 +433,23 @@ def build():
                        "expect": {"filename": fname, "page": page_no}})
         if i % 4 == 0:
             golden.append({"type": "draft", "brief": {"client_alias": "Client ZZ", "objective": "; ".join(t.split(" (estimated effort")[0].split("deliver: ")[1] for t in del_lines),
-                           "products": [product], "size_band": size, "pricing_model": pricing,
+                           "products": [product], "sector": sector, "size_band": size, "pricing_model": pricing,
                            "exclude_filenames": [fname]},   # hold out the source deal so it can't be copied
                            "reference_hours": sum(effort_total.values())})
+
+    # A draft must carry its sector's terms wherever another green deal in that sector (or, for AI
+    # terms, any green AI deal with strong terms) has them.
+    for g in golden:
+        if g["type"] != "draft":
+            continue
+        b = g["brief"]
+        held = b["exclude_filenames"][0]
+        others = [f for f in facts if f["filename"] != held and f["health"] == "green"]
+        exp = [ct for ct, _ in SECTOR_TERMS.get(b["sector"], [])
+               if any(f["sector"] == b["sector"] and ct in f["clauses"] for f in others)]
+        if b["products"] == ["Applied AI"]:
+            exp += [ct for ct, _ in AI_TERMS if any(f.get("ai") == "strong" for f in others)]
+        g["expect_terms"] = exp
 
     # Clause types whose presence is unambiguous by construction.
     clause_types = ["liability", "sla", "regulatory", "indemnity", "insurance", "non_solicitation", "force_majeure"]
@@ -440,10 +469,75 @@ def build():
         w.writerows([(c, "[person]") for c in CONTACTS])
     with open(OUT / "register.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(register[0])); w.writeheader(); w.writerows(register)
+    golden += review_samples()
     (OUT / "golden.jsonl").write_text("\n".join(json.dumps(g) for g in golden) + "\n")
     with open(OUT / "corpus_facts.json", "w") as f:      # ground truth for checking answers by hand
         json.dump([{**x, "clauses": sorted(x["clauses"])} for x in facts], f, indent=1)
     print(f"{len(CLIENTS)} SOWs, {len(golden)} golden cases -> {OUT}")
+
+
+
+# ---- SOWs for the "Review a SOW" tab: fictional, never ingested, with gaps planted on purpose ----
+def _num(sec, items):
+    return [f"{sec}.{k + 1} {t}" for k, t in enumerate(items)]
+
+
+def _sample(fname, client, sector, product, strong, deliverables, assumptions, extra10=(), extra11=(),
+            acceptance_extra=(), payment=None, staff=(), schedule2=None):
+    pages = [
+        ("Statement of Work", [f"Statement of Work for review, version 0.3 (draft), prepared by the Supplier for {client}.",
+                               f"Supplier: {bp.SUPPLIER[0]}. Client: {client}, a {sector} organisation.", bp.FOOTER]),
+        ("1. Definitions", _num(1, [d for d in bp.definitions(strong) if not d.startswith('"Regulator"')])),
+        ("2. Overview and term", _num(2, [f"Scope. This SOW describes the {product} services the Supplier will provide to {client} (the Client).",
+                                          "Term. The Services start on 2026-12-01 and end on 2027-05-31, unless terminated earlier under clause 11."])),
+        ("3. Deliverables (Schedule 1)", _num(3, [f"The Supplier will deliver: {d}." for d in deliverables])),
+        ("4. Assumptions and exclusions", _num(4, [f"Assumption: {a}" for a in assumptions])),
+        ("5. Staffing, governance and subcontracting", _num(5, list(staff) or [f"Governance. {GOVERNANCE}"])),
+        ("6. Charges and payment", _num(6, [payment] + ([schedule2] if schedule2 else []))),
+        ("7. Acceptance and non-conformity", _num(7, bp.acceptance(strong) + list(acceptance_extra))),
+        ("8. Change control", _num(8, [f"Change control: {CHANGE}"])),
+        ("9. Liability, indemnities and insurance", _num(9, bp.liability(strong, 1.5, "GBP", 2000000))),
+        ("10. Data protection, confidentiality and compliance", _num(10, bp.compliance(list(extra10)))),
+        ("11. Termination and exit", _num(11, bp.termination_exit(strong, 30) + list(extra11))),
+        ("12. General", _num(12, bp.general(strong, "England and Wales", "England and Wales"))),
+    ]
+    doc = Document()
+    for head, lines in pages:
+        doc.add_heading(head, level=1)
+        for l in lines:
+            doc.add_paragraph(l)
+    doc.save(OUT / "review_samples" / fname)
+
+
+def review_samples() -> list[dict]:
+    (OUT / "review_samples").mkdir(parents=True, exist_ok=True)
+    ai = PRODUCTS["Applied AI"]
+    _sample("fsi_ai_pilot_weak.docx", "Example Building Society", "financial services", "Applied AI", False,
+            [ai["deliverables"][0][0].format(n=8), ai["deliverables"][4][0].format(n=3)], ai["assumptions"][2:4],
+            extra10=bp.ai_governance(False, False), extra11=bp.knowledge_transfer(False),
+            acceptance_extra=bp.ai_acceptance(False), payment=bp.INVESTMENT_WEAK[0])
+    _sample("hospitality_aem_weak.docx", "Example Hotels Ltd", "hospitality", "AEM Sites", True,
+            [PRODUCTS["AEM Sites"]["deliverables"][1][0].format(n=30)], PRODUCTS["AEM Sites"]["assumptions"][:2],
+            staff=[f"Governance. {GOVERNANCE}", SUBCONTRACTING_WEAK[0]], acceptance_extra=(),
+            payment="Payment. The fixed price is invoiced against the Milestones in Schedule 2. Invoices are payable within 30 days of receipt.",
+            schedule2=f"Schedule 2 payment milestones: {PAYMENT_FIXED_STRONG[0][0]}.")
+    _sample("retail_target_strong.docx", "Example Stores plc", "retail", "Target", True,
+            [PRODUCTS["Target"]["deliverables"][0][0].format(n=10)], PRODUCTS["Target"]["assumptions"] + [RETAIL_PEAK[len("Assumption: "):]],
+            payment="Payment. The fixed price is invoiced against the Milestones in Schedule 2. Invoices are payable within 30 days of receipt.",
+            schedule2=f"Schedule 2 payment milestones: {PAYMENT_FIXED_STRONG[0][0]}.")
+    base = "demo/review_samples/"
+    return [
+        {"type": "review", "file": base + "fsi_ai_pilot_weak.docx", "sector": "financial services",
+         "product": "Applied AI", "pricing": "investment",
+         "expect_flagged": ["regulatory", "audit", "indemnity", "insurance", "exit_management", "acceptance",
+                            "ai_governance", "knowledge_transfer"], "expect_ok": []},
+        {"type": "review", "file": base + "hospitality_aem_weak.docx", "sector": "hospitality",
+         "product": "AEM Sites", "pricing": "fixed_price",
+         "expect_flagged": ["subcontracting"], "expect_ok": ["indemnity", "insurance", "exit_management"]},
+        {"type": "review", "file": base + "retail_target_strong.docx", "sector": "retail",
+         "product": "Target", "pricing": "fixed_price",
+         "expect_flagged": [], "expect_ok": ["indemnity", "insurance", "exit_management", "termination"]},
+    ]
 
 
 if __name__ == "__main__":

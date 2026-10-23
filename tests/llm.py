@@ -13,7 +13,9 @@ CLAUSE_WORDS = {"exit_management": "exit plan", "termination": "terminat", "subc
                 "liability": "liabilit", "payment": "invoice", "ip": "intellectual property",
                 "data_protection": "personal data", "sla": "service level", "audit": "audit",
                 "non_solicitation": "solicit", "force_majeure": "force majeure",
-                "ai_governance": "ai governance", "knowledge_transfer": "knowledge transfer"}
+                "ai_governance": "ai governance", "knowledge_transfer": "knowledge transfer",
+                "change_control": "change control", "confidentiality": "confidential",
+                "governing_law": "governing law", "dispute_resolution": "disput"}
 
 
 def embed(texts, query=False):
@@ -26,7 +28,12 @@ def embed(texts, query=False):
     return out
 
 
-def extract_json(system, user, schema, name):
+def extract_json(system, user, schema, name, model=None):
+    if name == "clause_review":                 # short clauses read as weak, longer ones as strong
+        tags = re.findall(r"\[K\d+\]", user)
+        weak = all(len(q) < 160 for q in re.findall(r"UPLOADED: (.+)", user))
+        return {"rating": "weak" if weak else "strong", "finding": "fake finding",
+                "redline": (f"Use the canonical wording {tags[0]}" if weak and tags else None)}
     if name == "sow_metadata":
         val = re.search(r"Total fixed price: [A-Z]{3} ([\d,]+)", user)
         term = re.search(r"start on (\d{4}-\d{2}-\d{2}) and end on (\d{4}-\d{2}-\d{2})", user)

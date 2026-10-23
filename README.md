@@ -17,6 +17,14 @@ local bge-small embeddings, PostgreSQL with pgvector, and an MCP server for Clau
 
 The demo runs on 48 fictional SOWs for invented clients: 38 Adobe implementations and 10 Applied AI engagements run by forward deployed engineers, across financial services, retail, hospitality and other sectors, with full contract boilerplate and 11 supplier-funded pilots whose conversion is recorded in the register (`demo/build_corpus.py`). No real customer data.
 
+Drafts are industry-aware: same-industry precedents come first, and each draft carries its sector's
+contract terms (regulatory, audit and exit for financial services, subcontracting for hospitality, AI
+governance and enablement exit for Applied AI) copied verbatim from the strongest proven deal.
+
+**Review a SOW** (`review.py`) scores an uploaded SOW against those canonical clauses: missing and weak
+clauses, the top fixes before signing, and redlines built only from cited precedents. Uploads are
+sanitised and held in memory; they never enter the library.
+
 ## Run it
 
 ```bash

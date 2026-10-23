@@ -5,6 +5,8 @@ Targets (the POC is "working" when all are met on the golden set):
   coverage recall = 1.0               precedent recall >= 0.95
   draft traceability = 100%
   draft effort within +/-20% of the reference estimate on >= 80% of briefs
+  drafts carry their sector's contract terms = 1.0
+  SOW review flags the planted gaps and passes the sound clauses >= 0.9
 """
 import json
 import re
@@ -12,9 +14,10 @@ import sys
 
 import search
 from assemble import draft_sow
+from review import review_sow
 
 TARGETS = {"extraction_accuracy": 0.95, "retrieval_hit_at_8": 0.90, "coverage_recall": 1.0, "precedent_recall": 0.95,
-           "draft_traceability": 1.0, "draft_effort_within_20pct": 0.80}
+           "draft_traceability": 1.0, "draft_industry_terms": 1.0, "review_accuracy": 0.9, "draft_effort_within_20pct": 0.80}
 
 
 def run(path="golden.jsonl") -> dict:
@@ -37,13 +40,21 @@ def run(path="golden.jsonl") -> dict:
             got = {r["filename"] for r in search.precedents(c["clause_type"], c.get("sector"))}
             want = set(c["expect_files"])
             scores["precedent_recall"].append(len(got & want) / len(want) if want else 1.0)
+        elif c["type"] == "review":                 # sample SOWs with planted gaps
+            r = review_sow(c["file"], c["sector"], c["product"], c["pricing"])
+            flagged = {x["clause_type"] for x in r["rows"] if x["status"] in ("missing", "weak")}
+            checks = [ct in flagged for ct in c["expect_flagged"]] + [ct not in flagged for ct in c["expect_ok"]]
+            scores["review_accuracy"].append(sum(checks) / len(checks))
         elif c["type"] == "draft":
             d = draft_sow(c["brief"])
             body = d["markdown"].split("## Effort estimate")[0]
-            paras = [p for p in body.split("\n\n")[2:] if p.strip() and not p.startswith("## ")]
-            ids = set(d["component_ids"])
-            cited = [bool({int(t) for t in re.findall(r"\[C(\d+)\]", p)} & ids) for p in paras]
+            paras = [p for p in body.split("\n\n")[2:] if p.strip() and not p.startswith(("#", ">"))]
+            ids, kids = set(d["component_ids"]), set(d.get("clause_ids", []))
+            cited = [bool({int(t) for t in re.findall(r"\[C(\d+)\]", p)} & ids
+                          or {int(t) for t in re.findall(r"\[K(\d+)\]", p)} & kids) for p in paras]
             scores["draft_traceability"].append(all(cited) if cited else False)
+            if c.get("expect_terms") is not None:     # the draft carries its sector's contract terms
+                scores["draft_industry_terms"].append(set(c["expect_terms"]) <= set(d.get("industry_terms", [])))
             ref = c.get("reference_hours")
             if ref:
                 scores["draft_effort_within_20pct"].append(abs(d["effort"]["total"] - ref) / ref <= 0.20)
