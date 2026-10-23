@@ -1,0 +1,4 @@
+{"type": "extraction", "filename": "client_a_aem_2024.pdf", "expect": {"pricing_model": "fixed_price", "end_date": "2025-03-31", "currency": "GBP"}}
+{"type": "retrieval", "query": "termination for convenience notice period", "expect": {"filename": "client_a_aem_2024.pdf", "page": 7}}
+{"type": "coverage", "clause_type": "liability", "expect_missing": ["client_c_target_2023.docx"]}
+{"type": "draft", "brief": {"client_alias": "Client X", "objective": "AEM Sites migration with headless front end", "products": ["AEM"], "size_band": "enterprise", "pricing_model": "fixed_price"}, "reference_hours": 1400}
