@@ -26,6 +26,12 @@ def clause_coverage(clause_type: str, present: bool = False) -> str:
 
 
 @mcp.tool()
+def precedents(clause_type: str, sector: str | None = None) -> str:
+    """Every clause of one type across the library with each deal's outcome, for best-practice questions."""
+    return _j(search.precedents(clause_type, sector))
+
+
+@mcp.tool()
 def contract_details(sow_id: int | None = None, expiring_within_days: int | None = None,
                      product: str | None = None) -> str:
     """Metadata and clause register for SOWs, filtered by id, expiry window or product."""

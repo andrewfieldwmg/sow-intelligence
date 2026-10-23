@@ -20,8 +20,10 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "60"))
 
 SECTIONS = ["scope", "deliverable", "assumption", "out_of_scope", "staffing",
             "governance", "acceptance", "change_control", "payment"]
-CLAUSE_TYPES = ["termination", "payment", "liability", "ip", "sla",
-                "data_protection", "audit", "change_control"]
+CLAUSE_TYPES = ["termination", "exit_management", "payment", "acceptance", "liability", "indemnity",
+                "insurance", "ip", "sla", "data_protection", "confidentiality", "audit", "regulatory",
+                "subcontracting", "change_control", "non_solicitation", "dispute_resolution",
+                "force_majeure", "governing_law", "anti_bribery"]
 
 
 def connect(role: str = "writer"):

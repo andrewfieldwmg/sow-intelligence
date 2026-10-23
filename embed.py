@@ -22,7 +22,7 @@ def fill(cur, table: str, text_col: str) -> int:
 def main():
     conn = connect("writer")
     with conn, conn.cursor() as cur:
-        n_chunks = fill(cur, "chunk", "text")
+        n_chunks = fill(cur, "chunk", "context || ' ' || text")
         n_comps = fill(cur, "component", "coalesce(title, '') || E'\\n' || body")
         # HNSW works on any amount of data and needs no training, unlike IVFFlat on an empty table.
         cur.execute("CREATE INDEX IF NOT EXISTS chunk_vec_idx ON chunk USING hnsw (embedding vector_cosine_ops)")

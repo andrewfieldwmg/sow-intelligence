@@ -2,7 +2,8 @@
 
 Targets (the POC is "working" when all are met on the golden set):
   extraction field accuracy >= 0.95   retrieval hit@8 >= 0.90
-  coverage recall = 1.0               draft traceability = 100%
+  coverage recall = 1.0               precedent recall >= 0.95
+  draft traceability = 100%
   draft effort within +/-20% of the reference estimate on >= 80% of briefs
 """
 import json
@@ -12,7 +13,7 @@ import sys
 import search
 from assemble import draft_sow
 
-TARGETS = {"extraction_accuracy": 0.95, "retrieval_hit_at_8": 0.90, "coverage_recall": 1.0,
+TARGETS = {"extraction_accuracy": 0.95, "retrieval_hit_at_8": 0.90, "coverage_recall": 1.0, "precedent_recall": 0.95,
            "draft_traceability": 1.0, "draft_effort_within_20pct": 0.80}
 
 
@@ -32,6 +33,10 @@ def run(path="golden.jsonl") -> dict:
             got = {r["filename"] for r in search.clause_coverage(c["clause_type"])}
             want = set(c["expect_missing"])
             scores["coverage_recall"].append(len(got & want) / len(want) if want else float(not got))
+        elif c["type"] == "precedent":
+            got = {r["filename"] for r in search.precedents(c["clause_type"], c.get("sector"))}
+            want = set(c["expect_files"])
+            scores["precedent_recall"].append(len(got & want) / len(want) if want else 1.0)
         elif c["type"] == "draft":
             d = draft_sow(c["brief"])
             body = d["markdown"].split("## Effort estimate")[0]

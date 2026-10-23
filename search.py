@@ -111,3 +111,19 @@ def find_components(query: str, section: str | None = None, product: str | None 
         FROM component c JOIN sow s ON s.id = c.sow_id
         WHERE {' AND '.join(where)}
         ORDER BY c.embedding <=> %s LIMIT %s""", [qv, *params, qv, k])
+
+
+def precedents(clause_type: str, sector: str | None = None) -> list[dict]:
+    """Every clause of one type across the library, with the outcome of the deal it came from, so
+    "what works" questions are answered by comparing outcomes, not from a top-k sample."""
+    if clause_type not in CLAUSE_TYPES:
+        raise ValueError(f"clause_type must be one of {CLAUSE_TYPES}")
+    where, params = ["c.clause_type = %s"], [clause_type]
+    if sector:
+        where.append("s.sector ILIKE %s"); params.append(f"%{sector}%")
+    return _rows(f"""
+        SELECT s.filename, s.client_alias, s.sector, s.pricing_model, s.proven, s.delivery_health,
+               s.margin_band, s.csat, c.summary, c.key_value, c.quote, c.page_no
+        FROM clause c JOIN sow s ON s.id = c.sow_id
+        WHERE {' AND '.join(where)}
+        ORDER BY (s.delivery_health = 'green') DESC, s.margin_band, s.filename""", params)

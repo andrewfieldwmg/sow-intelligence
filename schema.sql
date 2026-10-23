@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS sow (
     sector          TEXT,
     size_band       TEXT,                          -- e.g. 'enterprise', 'mid-market'
     products        TEXT[] DEFAULT '{}',
-    pricing_model   TEXT,                          -- 'fixed_price' | 't_and_m' | 'mixed'
+    pricing_model   TEXT,                          -- 'fixed_price' | 't_and_m' | 'mixed' | 'investment'
     contract_value  NUMERIC,
     currency        TEXT,
     start_date      DATE,
@@ -63,8 +63,9 @@ CREATE TABLE IF NOT EXISTS chunk (
     page_no     INT,
     chunk_index INT NOT NULL,
     clause_type TEXT,
+    context     TEXT NOT NULL DEFAULT '',          -- "Client A | AEM Sites | 4. Assumptions": searchable, never cited
     text        TEXT NOT NULL,
-    tsv         tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED,
+    tsv         tsvector GENERATED ALWAYS AS (to_tsvector('english', context || ' ' || text)) STORED,
     embedding   vector(384)
 );
 CREATE INDEX IF NOT EXISTS chunk_tsv_idx ON chunk USING gin (tsv);

@@ -13,7 +13,7 @@ from config import CLAUSE_TYPES
 
 PRODUCTS = ["AEM Sites", "AEM Assets", "Target", "Analytics", "Journey Optimizer"]
 INTRO = """# SOW Contract Intelligence (v2 demo)
-Search, check and draft Statements of Work from a library of **18 fictional SOWs** for invented clients.
+Search, check and draft Statements of Work from a library of **38 fictional SOWs** for invented clients.
 New drafts are assembled only from components of deals the delivery register marks as proven, and every
 paragraph cites its source. Nothing here is real customer data."""
 
@@ -82,7 +82,7 @@ with gr.Blocks(title="SOW Contract Intelligence") as demo:
             alias = gr.Textbox(label="Client alias", value="Client Z")
             prod = gr.Dropdown(PRODUCTS, value="AEM Sites", label="Product")
             size = gr.Dropdown(["enterprise", "mid-market", "smb"], value="enterprise", label="Size")
-            price = gr.Dropdown(["fixed_price", "t_and_m"], value="fixed_price", label="Pricing")
+            price = gr.Dropdown(["fixed_price", "t_and_m", "investment"], value="fixed_price", label="Pricing")
         obj = gr.Textbox(label="Objective", lines=2,
                          placeholder="Migrate 30 market sites to AEM Sites with a shared component library")
         notes, draft = gr.Markdown(), gr.Markdown()

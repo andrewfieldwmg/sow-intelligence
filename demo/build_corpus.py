@@ -1,6 +1,13 @@
-"""Builds the fictional demo corpus: 18 SOWs (Word and PDF) for invented clients, plus the alias
+"""Builds the fictional demo corpus: 38 SOWs (Word and PDF) for invented clients, plus the alias
 map, the delivery register and a golden eval set whose answers are known by construction.
-Every company, person and number here is made up."""
+
+Every company, person and number here is made up. Clause wording is illustrative, written to look
+like UK practice, and is not legal advice.
+
+Sector clause libraries come in strong and weak versions. Strong versions mostly land in deals the
+register marks green and on-margin; weak ones mostly in amber or red deals. That is what lets the
+app answer "what works" from outcomes rather than opinion.
+"""
 import csv
 import json
 import random
@@ -11,23 +18,64 @@ from pathlib import Path
 from docx import Document
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parent.parent))
+import boilerplate as bp                                   # noqa: E402
+from ingest import read_pages                              # noqa: E402
 
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "demo")
 rng = random.Random(42)
 
-CLIENTS = [  # invented names, each mapped to an alias
-    ("Halden Retail Group plc", "retail", "enterprise"), ("Brackwater Building Society", "financial services", "enterprise"),
-    ("Corrin Motors Ltd", "automotive", "enterprise"), ("Felsham Pharma AG", "pharma", "enterprise"),
-    ("Marlowe Leisure Parks", "travel and leisure", "mid-market"), ("Ostrava Components plc", "industrial", "enterprise"),
-    ("Pellow Home Stores", "retail", "mid-market"), ("Quillon Insurance plc", "financial services", "enterprise"),
-    ("Ravensby Telecom", "telecoms", "enterprise"), ("Stirlow Foods Ltd", "consumer goods", "mid-market"),
-    ("Tamsin Optics GmbH", "healthcare", "mid-market"), ("Ulverton Energy plc", "energy", "enterprise"),
-    ("Vexley Fashion Ltd", "retail", "mid-market"), ("Wendover Rail", "transport", "enterprise"),
-    ("Yardley Learning Trust", "education", "smb"), ("Zennor Hotels Ltd", "travel and leisure", "mid-market"),
-    ("Ashcombe Distribution", "logistics", "mid-market"), ("Belmont Mutual", "financial services", "enterprise"),
+# (name, short name used in prose or None, sector, size). All invented.
+CLIENTS = [
+    ("Brackwater Building Society", "Brackwater", "financial services", "enterprise"),
+    ("Quillon Insurance plc", "Quillon", "financial services", "enterprise"),
+    ("Belmont Mutual", None, "financial services", "enterprise"),
+    ("Harrowgate Bank plc", "Harrowgate", "financial services", "enterprise"),
+    ("Kestrel Life Assurance", "Kestrel", "financial services", "enterprise"),
+    ("Northdene Credit Union", "Northdene", "financial services", "smb"),
+    ("Selby Wealth Management", None, "financial services", "mid-market"),
+    ("Tolland Payments Ltd", "Tolland", "financial services", "mid-market"),
+    ("Arden Capital Markets", None, "financial services", "enterprise"),
+    ("Cawston Pensions Trust", "Cawston", "financial services", "mid-market"),
+    ("Halden Retail Group plc", "Halden", "retail", "enterprise"),
+    ("Pellow Home Stores", "Pellow", "retail", "mid-market"),
+    ("Vexley Fashion Ltd", "Vexley", "retail", "mid-market"),
+    ("Orrin Grocers plc", "Orrin", "retail", "enterprise"),
+    ("Larkfield Outdoor", "Larkfield", "retail", "mid-market"),
+    ("Thistlebrook Pharmacy", "Thistlebrook", "retail", "enterprise"),
+    ("Calderwick Electricals", "Calderwick", "retail", "enterprise"),
+    ("Penhale Books", "Penhale", "retail", "smb"),
+    ("Rushmere Furniture", "Rushmere", "retail", "mid-market"),
+    ("Zennor Hotels Ltd", "Zennor", "hospitality", "mid-market"),
+    ("Marlowe Leisure Parks", "Marlowe", "hospitality", "enterprise"),
+    ("Glenvar Resorts", "Glenvar", "hospitality", "enterprise"),
+    ("Saltmarsh Inns", None, "hospitality", "mid-market"),
+    ("Brightwater Cruises", None, "hospitality", "enterprise"),
+    ("Corran Holidays", "Corran", "hospitality", "mid-market"),
+    ("Ashby Hotel Group", None, "hospitality", "enterprise"),
+    ("Lowther Spa and Golf", "Lowther", "hospitality", "smb"),
+    ("Corrin Motors Ltd", "Corrin", "automotive", "enterprise"),
+    ("Felsham Pharma AG", "Felsham", "pharma", "enterprise"),
+    ("Ostrava Components plc", "Ostrava", "industrial", "enterprise"),
+    ("Ravensby Telecom", "Ravensby", "telecoms", "enterprise"),
+    ("Stirlow Foods Ltd", "Stirlow", "consumer goods", "mid-market"),
+    ("Tamsin Optics GmbH", "Tamsin", "healthcare", "mid-market"),
+    ("Ulverton Energy plc", "Ulverton", "energy", "enterprise"),
+    ("Wendover Rail", "Wendover", "transport", "enterprise"),
+    ("Yardley Learning Trust", "Yardley", "education", "smb"),
+    ("Ashcombe Distribution", "Ashcombe", "logistics", "mid-market"),
+    ("Felbridge Water", "Felbridge", "utilities", "enterprise"),
 ]
-CONTACTS = ["Priya Natarajan", "Tom Ellery", "Sian Morgan", "Lukas Brandt", "Ana Ferreira", "Dev Malhotra"]
+EU_CLIENTS = {"Felsham Pharma AG", "Tamsin Optics GmbH", "Arden Capital Markets", "Tolland Payments Ltd"}
+CONTACTS = ["Priya Natarajan", "Tom Ellery", "Sian Morgan", "Lukas Brandt", "Ana Ferreira", "Dev Malhotra",
+            "Grace Okafor", "Owen Pryce"]
+# Delivery outcome per client index: mostly green, some amber, a few red.
+# Pre-sales "investment" engagements: no fee, funded by the Supplier to prove value and convert.
+INVESTMENT = {2, 9, 17, 24, 31, 37}
+HEALTH = {i: "red" for i in (4, 12, 15, 22, 30, 35)} | {i: "amber" for i in (1, 7, 10, 18, 20, 25, 28, 33)}
 
 PRODUCTS = {
     "AEM Sites": {
@@ -84,79 +132,199 @@ PRODUCTS = {
         "out_of_scope": ["SMS channel set-up.", "Decommissioning of the previous email platform."],
     },
 }
+
+# ---- Sector and general clause libraries: strong versions first, weak versions second ----------
+FSI_REGULATORY_STRONG = [
+    "Regulatory assumption: the Client is responsible for assessing whether these services are a material outsourcing under the FCA's SYSC 8 rules and PRA Supervisory Statement SS2/21; the Supplier will provide the information the Client reasonably needs for that assessment within ten working days of request.",
+    "Regulatory assumption: the Client, its auditors and its regulators (including the FCA and PRA) have the access, audit and information rights set out in the regulatory schedule of the master services agreement, and the Supplier will flow those rights down to any subcontractor.",
+    "Regulatory assumption: the Client remains responsible for mapping its important business services and impact tolerances under the operational resilience rules; the Supplier will support scenario testing of the in-scope platform on reasonable notice, at the rates in this SOW.",
+    "Regulatory assumption: customer data processed under this SOW is stored and processed only in the UK or EEA, and any change of hosting region needs the Client's prior written approval.",
+    "Regulatory assumption: the Client is responsible for testing customer communications against its Consumer Duty obligations; the Supplier builds journeys and content to the rules and approvals the Client provides.",
+    "Regulatory assumption: the Supplier maintains a documented exit plan for these services, reviewed annually, so the Client can transfer them to itself or another provider in an orderly way.",
+]
+DORA_STRONG = "Regulatory assumption: as the Client is an EU financial entity, the Supplier will provide the information the Client needs for its register of ICT third-party arrangements under DORA and will report ICT incidents affecting the services within four hours of becoming aware of them."
+FSI_REGULATORY_WEAK = [
+    "Regulatory assumption: the Supplier will ensure that the solution complies with all applicable laws and regulations.",
+    "Regulatory assumption: the Supplier will support the Client with any regulatory requests as required.",
+]
+
+ACCEPTANCE_STRONG = [
+    "Acceptance: each deliverable is tested against the acceptance criteria and test scripts agreed in writing before its build sprint starts. The Client has ten working days from delivery to run the tests. A deliverable is accepted when no severity 1 or 2 defects remain open; severity 3 and 4 defects are logged and fixed in the next release and do not block acceptance. If the Client neither accepts nor raises a severity 1 or 2 defect within the test window, the deliverable is deemed accepted.",
+    "Acceptance: acceptance criteria are objective and measurable and are recorded in the acceptance schedule. The Client may reject a deliverable only by giving written reasons that refer to a specific criterion. The Supplier will fix and resubmit within five working days. After two rejection cycles for the same deliverable, either party may refer the matter to the steering committee, and use of the deliverable in production counts as acceptance.",
+]
+ACCEPTANCE_WEAK = [
+    "Acceptance: each deliverable will be accepted when it is to the Client's reasonable satisfaction.",
+    "Acceptance: the Client will confirm acceptance once it is happy that the deliverable meets its requirements.",
+]
+
+PAYMENT_FIXED_STRONG = [
+    ("15% on mobilisation, 25% on design sign-off, 30% on completion of user acceptance testing, 20% on go-live, and 10% retention released 30 days after go-live once hypercare exits", "15/25/30/20/10 with retention"),
+    ("20% on mobilisation, 30% on design sign-off, 30% on UAT completion and 20% on go-live; milestones are deemed achieved if the Client has not raised a blocking defect within ten working days", "20/30/30/20 with deemed achievement"),
+]
+PAYMENT_FIXED_WEAK = [
+    ("10% on signature and 90% on final acceptance of all deliverables", "10/90 back-loaded"),
+    ("100% on final acceptance of the complete solution", "100% on completion"),
+]
+RETAIL_PEAK = "Assumption: no production releases take place during the Client's peak trading freeze from 1 November to 15 January; milestones that fall in the freeze move to the first working week after it, and the payment schedule moves with them."
+
+SUBCONTRACTING_STRONG = [
+    "Subcontracting: the Supplier may subcontract parts of the services only with the Client's prior written consent, which is not to be unreasonably withheld. The approved subcontractors are listed in Appendix B. The Supplier remains responsible for the acts and omissions of its subcontractors as if they were its own, and will flow down obligations of confidentiality, data protection and information security no less protective than those in this SOW.",
+    "Subcontracting: where a subcontractor will handle payment card data, for example in booking or point-of-sale integrations, the Supplier will ensure the subcontractor is PCI DSS compliant and will provide its attestation of compliance on request. No subcontractor may process guest personal data outside the UK or EEA without the Client's written approval.",
+    "Subcontracting: to cover the Client's peak season from May to September, the Supplier may add named subcontractors from Appendix B on ten working days' notice; replacements must have equivalent skills and experience, and the Supplier bears any handover cost.",
+]
+SUBCONTRACTING_WEAK = [
+    "Subcontracting: the Supplier may subcontract any part of the services at its discretion.",
+]
+
 STAFFING = "The Supplier will provide a delivery team of an engagement manager, a solution architect and {dev} developers, with QA support as needed."
 GOVERNANCE = "Weekly status meetings review progress, RAID and budget, and a monthly steering committee with the Client sponsor approves changes to priorities."
-ACCEPTANCE = "Each deliverable is accepted when the Client confirms in writing that it meets the acceptance criteria, or ten working days after delivery if no defects are raised."
 CHANGE = "Any change to scope, timeline or fees is handled through a written change request, assessed by the Supplier within five working days and approved by both parties before work starts."
-LEGAL = {
-    "termination": ["Either party may terminate this SOW for convenience on {d} days' written notice; fees for work performed up to the termination date remain payable.",
-                    "Either party may terminate this SOW immediately by written notice if the other commits a material breach that is not remedied within {d} days."],
-    "liability": ["Each party's total liability under this SOW is limited to the fees paid or payable in the twelve months before the claim.",
-                  "The Supplier's total liability under this SOW is capped at {m} times the total fees, excluding liability for death, personal injury or fraud."],
-    "ip": ["The Client owns all deliverables created specifically for it under this SOW on payment of the relevant fees; the Supplier retains its pre-existing tools and know-how."],
-    "data_protection": ["Where the Supplier processes personal data on the Client's behalf it acts as processor under the data processing agreement in the master services agreement, and complies with UK GDPR."],
-    "sla": ["During hypercare the Supplier responds to priority one incidents within four hours and priority two incidents within one working day."],
-    "audit": ["The Client may audit the Supplier's time records for this SOW once per year on thirty days' notice."],
-}
+
+
+def _letters(i):
+    s = ""
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
 
 
 def build():
     (OUT / "sows").mkdir(parents=True, exist_ok=True)
-    aliases, register, golden = [], [], []
-    letters = "ABCDEFGHIJKLMNOPQR"
-    for i, (name, sector, size) in enumerate(CLIENTS):
-        alias = f"Client {letters[i]}"
+    aliases, register, golden, facts = [], [], [], []
+    for i, (name, short, sector, size) in enumerate(CLIENTS):
+        alias = f"Client {_letters(i)}"
         aliases.append((name, alias))
-        short = name.split()[0]
-        if short not in ("Belmont",):
+        if short:
             aliases.append((short, alias))
+        health = HEALTH.get(i, "green")
+        strong = health == "green" or (health == "amber" and i % 2 == 0)
         product = list(PRODUCTS)[i % len(PRODUCTS)]
         p = PRODUCTS[product]
         year = 2022 + i % 4
         start = date(year, 1 + (i * 5) % 12, 1)
         end = start + timedelta(days=rng.choice([120, 180, 240, 300]))
-        pricing = rng.choice(["fixed_price", "fixed_price", "t_and_m"])
+        pricing = ("investment" if i in INVESTMENT else
+                   "fixed_price" if (sector == "retail" or rng.random() < 0.6) else "t_and_m")
         dels = rng.sample(p["deliverables"], k=min(len(p["deliverables"]), rng.choice([2, 3])))
         effort_total, del_lines = {}, []
         for text, eff in dels:
             n = rng.choice([4, 6, 8, 12, 20, 40])
-            scale = rng.choice([0.8, 1.0, 1.25])
+            scale = rng.choice([0.85, 1.0, 1.15])
             hrs = {r: round(h * scale) for r, h in eff.items()}
             for r, h in hrs.items():
                 effort_total[r] = effort_total.get(r, 0) + h
             role_txt = ", ".join(f"{r.upper() if len(r) <= 2 else r.title()} {h}h" for r, h in hrs.items())
-            del_lines.append(f"The Supplier will deliver a {text.format(n=n)} (estimated effort: {role_txt}).")
+            del_lines.append(f"The Supplier will deliver: {text.format(n=n)} (estimated effort: {role_txt}).")
         pm = round(sum(effort_total.values()) * rng.choice([0.10, 0.12, 0.15]))
         effort_total["pm"] = pm
         rate = rng.choice([1050, 1150, 1250])
         value = round(sum(effort_total.values()) / 8 * rate, -3)
-        currency = "GBP" if i % 5 else "EUR"
-        clauses = ["termination", "ip"] + [c for c in ("liability", "data_protection", "sla", "audit") if rng.random() < 0.7]
-        if i in (3, 10):
-            clauses = [c for c in clauses if c != "liability"]   # guarantee some gaps
+        currency = "EUR" if name in EU_CLIENTS else "GBP"
         contact = CONTACTS[i % len(CONTACTS)]
+        handle = (short or name.split()[0]).lower()
+
+        # Sector-specific material, strong or weak depending on how the deal went.
+        extra_assumptions, sector_clauses, tags = [], [], {}
+        if sector == "financial services":
+            if strong:
+                extra_assumptions += rng.sample(FSI_REGULATORY_STRONG, k=4)
+                if name in EU_CLIENTS:
+                    extra_assumptions.append(DORA_STRONG)
+            else:
+                extra_assumptions.append(rng.choice(FSI_REGULATORY_WEAK))
+            tags["regulatory"] = "strong" if strong else "weak"
+        if sector == "retail":
+            if strong:
+                extra_assumptions.append(RETAIL_PEAK)
+            tags["peak_freeze"] = strong
+        if sector == "hospitality" or (sector in ("transport", "telecoms") and rng.random() < 0.5):
+            subs = rng.sample(SUBCONTRACTING_STRONG, k=2) if strong else SUBCONTRACTING_WEAK[:]
+            sector_clauses += subs
+            tags["subcontracting"] = "strong" if strong else "weak"
+        tags["acceptance"] = "strong" if strong else "weak"
+        if pricing == "fixed_price":
+            sched, label = rng.choice(PAYMENT_FIXED_STRONG if strong else PAYMENT_FIXED_WEAK)
+            payment = (f"Payment. The fixed price is invoiced against the Milestones in Schedule 2. "
+                       f"Invoices are payable within {rng.choice([30, 45])} days of receipt.")
+            tags["payment_schedule"] = label
+        elif pricing == "investment":
+            sched = None
+            payment = rng.choice(bp.INVESTMENT_STRONG if strong else bp.INVESTMENT_WEAK)
+            tags["investment"] = "strong" if strong else "weak"
+        else:
+            sched = None
+            payment = (f"Payment. Time and materials are invoiced monthly in arrears against approved timesheets; "
+                       f"invoices are payable within {rng.choice([30, 45, 60])} days of receipt.")
+        base_assumptions = [f"Assumption: {a}" for a in rng.sample(p["assumptions"], k=min(2, len(p["assumptions"])))]
+        section3 = base_assumptions + extra_assumptions + [f"Out of scope: {p['out_of_scope'][0]}"]
+        sla = rng.random() < (0.7 if strong else 0.3)
+        eu = name in EU_CLIENTS
+        law, courts = (("Ireland", "Ireland") if eu else ("England and Wales", "England and Wales"))
+        company_no = f"{rng.randint(1000000, 9999999):08d}"
+        msa_date = date(year - 1, rng.randint(1, 12), rng.randint(1, 28))
+        defs = [x for x in bp.definitions(strong)
+                if (sector == "financial services" or not x.startswith('"Regulator"'))
+                and ("subcontracting" in tags or not x.startswith('"Subcontractor"'))]
+        reg_clause = (["Regulatory access. The Supplier will give the Client, its auditors and any Regulator access to "
+                       "premises, personnel, systems and records relating to the Services as they reasonably require "
+                       "to meet regulatory obligations, and will cooperate with any Regulator investigation."]
+                      if sector == "financial services" and strong else [])
+        audit = ["Audit. The Client may audit the Supplier's records relating to the Charges and the Services once in "
+                 "any 12-month period on 30 days' notice" + (", and at any time on reasonable notice if required by a Regulator."
+                 if sector == "financial services" else ".")] \
+            if (strong or rng.random() < 0.4) else []
+        schedule2 = ([f"Schedule 2 payment milestones: {sched}."] if pricing == "fixed_price"
+                     else ["Schedule 2 rates: blended day rate as in clause 2.3; expenses at cost with prior approval."])
+        credits = (["Service credits. If the Supplier misses the hypercare response times in this clause in any month, "
+                    "the Client is entitled to a service credit of 2% of that month's Charges per missed response, capped "
+                    "at 10%. Service credits are a price adjustment and not the Client's sole remedy."] if sla and strong else [])
+        sla_txt = (["Service levels. During hypercare the Supplier will respond to Severity 1 incidents within one hour and "
+                    "resolve or provide a workaround within four hours, and respond to Severity 2 incidents within four hours."]
+                   if sla else [])
+        cover = [
+            f"Statement of Work number SOW-{year}-{100 + i:03d}, version 1.0, issued {start.isoformat()}, prepared by the Supplier engagement lead.",
+            f"This SOW is made under the Master Services Agreement between the parties dated {msa_date.isoformat()} (the MSA).",
+            f"Supplier: {bp.SUPPLIER[0]}, company number {bp.SUPPLIER[1]}, registered office {bp.SUPPLIER[2]}.",
+            f"Client: {name}, company number {company_no}, {'an' if size[0] in 'aeiou' else 'a'} {size} {sector} organisation.",
+            bp.FOOTER,
+        ]
+        present = {"termination", "payment", "acceptance", "change_control", "liability", "ip", "data_protection",
+                   "confidentiality", "force_majeure", "governing_law", "anti_bribery"}
+        if strong:
+            present |= {"indemnity", "insurance", "exit_management", "non_solicitation", "dispute_resolution"}
+        if sla:
+            present.add("sla")
+        if audit:
+            present.add("audit")
+        def num(sec, items):
+            return [f"{sec}.{k + 1} {t}" for k, t in enumerate(items)]
         pages = [
-            ("1. Overview", [
-                f"1.1 This Statement of Work describes the {product} services the Supplier will provide to {name} (the Client).",
-                f"1.2 The engagement starts on {start.isoformat()} and ends on {end.isoformat()}.",
-                f"1.3 The Client's project sponsor is {contact} ({contact.split()[0].lower()}@{short.lower()}.example, +44 20 7946 {1000 + i:04d}).",
-                (f"1.4 Total fixed price: {currency} {value:,.0f}, invoiced against milestones." if pricing == "fixed_price"
-                 else f"1.4 Services are charged on a time and materials basis at a blended day rate of {currency} {rate:,}, with an estimated total of {currency} {value:,.0f}."),
-            ]),
-            ("2. Deliverables", [f"2.{k + 1} {d}" for k, d in enumerate(del_lines)]),
-            ("3. Assumptions and exclusions",
-             [f"3.{k + 1} Assumption: {a}" for k, a in enumerate(rng.sample(p["assumptions"], k=min(2, len(p["assumptions"]))))]
-             + [f"3.{k + 3} Out of scope: {o}" for k, o in enumerate(p["out_of_scope"][:1])]),
-            ("4. Staffing and governance", [
-                f"4.1 Staffing: {STAFFING.format(dev=rng.choice([2, 3, 4]))} Engagement management is estimated at PM {pm}h.",
-                f"4.2 Governance: {GOVERNANCE}"]),
-            ("5. Commercial terms", [
-                f"5.1 Payment: invoices are payable within {rng.choice([30, 45, 60])} days of receipt.",
-                f"5.2 Acceptance: {ACCEPTANCE}",
-                f"5.3 Change control: {CHANGE}"]),
-            ("6. Legal terms", [
-                f"6.{k + 1} {rng.choice(LEGAL[c]).format(d=rng.choice([30, 60, 90]), m=rng.choice([1, 1.5, 2]))}"
-                for k, c in enumerate(clauses)]),
+            ("Statement of Work", cover),
+            ("1. Definitions", num(1, defs)),
+            ("2. Overview and term", num(2, [
+                f"Scope. This SOW describes the {product} services the Supplier will provide to {name} (the Client).",
+                f"Term. The Services start on {start.isoformat()} and end on {end.isoformat()}, unless terminated earlier under clause 11.",
+                f"Contacts. The Client's project sponsor is {contact} ({contact.split()[0].lower()}@{handle}.example, +44 20 7946 {1000 + i:04d}).",
+                (f"Charges. The Services are provided at no charge as a Supplier-funded investment with an internal value of {currency} {value:,.0f}; see clause 6." if pricing == "investment"
+                 else f"Charges. Total fixed price: {currency} {value:,.0f}, payable in accordance with clause 6 and Schedule 2." if pricing == "fixed_price"
+                 else f"Charges. Services are charged on a time and materials basis at a blended day rate of {currency} {rate:,}, with an estimated total of {currency} {value:,.0f}."),
+            ])),
+            ("3. Deliverables (Schedule 1)", num(3, del_lines)),
+            ("4. Assumptions and exclusions", num(4, section3)),
+            ("5. Staffing, governance and subcontracting", num(5, [
+                f"Key Personnel. The engagement manager and solution architect named in the mobilisation plan are Key Personnel. {STAFFING.format(dev=rng.choice([2, 3, 4]))} Engagement management is estimated at PM {pm}h.",
+                f"Governance. {GOVERNANCE}"] + sector_clauses)),
+            ("6. Charges and payment", num(6, [payment] + schedule2 + sla_txt + credits)),
+            ("7. Acceptance and non-conformity", num(7, bp.acceptance(strong))),
+            ("8. Change control", num(8, [f"Change control: {CHANGE}"])),
+            ("9. Liability, indemnities and insurance", num(9, bp.liability(strong, rng.choice([1, 1.5, 2]), currency, rng.choice([1000000, 2000000, 5000000])))),
+            ("10. Data protection, confidentiality and compliance", num(10, bp.compliance(reg_clause + audit))),
+            ("11. Termination and exit", num(11, bp.termination_exit(strong, rng.choice([30, 60, 90]), sector == "financial services"))),
+            ("12. General", num(12, bp.general(strong, law, courts))),
+            ("Signatures", [f"Signed for and on behalf of {bp.SUPPLIER[0]} by its authorised signatory.",
+                            f"Signed for and on behalf of {name} by its authorised signatory.", bp.FOOTER]),
         ]
         stem = f"{alias.lower().replace(' ', '_')}_{product.lower().replace(' ', '_')}_{year}"   # files are named by alias
         fname = stem + (".pdf" if i % 3 == 2 else ".docx")
@@ -175,32 +343,51 @@ def build():
                 story += [Paragraph(l, styles["Normal"]) for l in lines]
                 story.append(PageBreak())
             SimpleDocTemplate(str(OUT / "sows" / fname), pagesize=A4).build(story[:-1])
-        health = "red" if i in (4, 11, 15) else rng.choice(["green", "green", "amber"])
-        register.append({"filename": fname, "proven": str(health != "red").lower(), "delivery_health": health,
-                         "margin_band": {"green": "on", "amber": rng.choice(["on", "below"]), "red": "below"}[health],
-                         "csat": {"green": rng.choice([9, 10]), "amber": rng.choice([7, 8]), "red": 6}[health]})
+
+        register.append({"filename": fname, "sector": sector, "proven": str(health != "red").lower(),
+                         "delivery_health": health,
+                         "margin_band": {"green": "on", "amber": "below" if not strong else "on", "red": "below"}[health],
+                         "csat": {"green": rng.choice([9, 10]), "amber": rng.choice([7, 8]), "red": rng.choice([5, 6])}[health]})
+        if "regulatory" in tags:
+            present.add("regulatory")
+        if "subcontracting" in tags:
+            present.add("subcontracting")
+        facts.append({"filename": fname, "sector": sector, "health": health, "clauses": present, **tags})
+
         golden.append({"type": "extraction", "filename": fname,
                        "expect": {"pricing_model": pricing, "currency": currency,
                                   "start_date": start.isoformat(), "end_date": end.isoformat()}})
+        page_no = next(k for k, t in enumerate(read_pages(OUT / "sows" / fname), 1)
+                       if "3.1 The Supplier will deliver:" in " ".join(t.split()))
         golden.append({"type": "retrieval", "query": f"{alias} {product} " + " ".join(dels[0][0].format(n="").split()[:6]),
-                       "expect": {"filename": fname, "page": 2}})
-        if i % 3 == 0:
-            golden.append({"type": "draft", "brief": {"client_alias": "Client Z", "objective": dels[0][0].format(n=10),
+                       "expect": {"filename": fname, "page": page_no}})
+        if i % 4 == 0:
+            golden.append({"type": "draft", "brief": {"client_alias": "Client ZZ", "objective": "; ".join(t.split(" (estimated effort")[0].split("deliver: ")[1] for t in del_lines),
                            "products": [product], "size_band": size, "pricing_model": pricing,
                            "exclude_filenames": [fname]},   # hold out the source deal so it can't be copied
                            "reference_hours": sum(effort_total.values())})
-        register[-1]["_clauses"] = clauses
-    for ct in LEGAL:
+
+    # Clause types whose presence is unambiguous by construction.
+    clause_types = ["liability", "sla", "regulatory", "indemnity", "insurance", "non_solicitation", "force_majeure"]
+    for ct in clause_types:
         golden.append({"type": "coverage", "clause_type": ct,
-                       "expect_missing": [r["filename"] for r in register if ct not in r["_clauses"]]})
-    for r in register:
-        del r["_clauses"]
+                       "expect_missing": [f["filename"] for f in facts if ct not in f["clauses"]]})
+    # Precedent cases: the comparison tool must return every deal in the sector that has the clause.
+    for ct, sector in (("regulatory", "financial services"), ("acceptance", None),
+                       ("payment", "retail"), ("subcontracting", "hospitality"),
+                       ("exit_management", None), ("termination", "financial services"),
+                       ("audit", "financial services")):
+        golden.append({"type": "precedent", "clause_type": ct, "sector": sector,
+                       "expect_files": [f["filename"] for f in facts
+                                        if ct in f["clauses"] and (sector is None or f["sector"] == sector)]})
     with open(OUT / "alias_map.csv", "w", newline="") as f:
         w = csv.writer(f); w.writerow(["real", "alias"]); w.writerows(aliases)
         w.writerows([(c, "[person]") for c in CONTACTS])
     with open(OUT / "register.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(register[0])); w.writeheader(); w.writerows(register)
     (OUT / "golden.jsonl").write_text("\n".join(json.dumps(g) for g in golden) + "\n")
+    with open(OUT / "corpus_facts.json", "w") as f:      # ground truth for checking answers by hand
+        json.dump([{**x, "clauses": sorted(x["clauses"])} for x in facts], f, indent=1)
     print(f"{len(CLIENTS)} SOWs, {len(golden)} golden cases -> {OUT}")
 
 

@@ -41,12 +41,42 @@ def pm_ratio() -> float | None:
     return round(statistics.median(ratios), 3) if ratios else None
 
 
+def _shape(body: str) -> str:
+    """A deliverable with its numbers and effort note removed, so the same item in two deals compares equal."""
+    return re.sub(r"\d+", "#", body.split("(estimated effort")[0]).strip().lower()[:120]
+
+
 def select_components(brief: dict) -> tuple[dict, list[str]]:
     chosen, gaps, seen = {}, [], set()
     product = (brief.get("products") or [None])[0]
+    exclude = brief.get("exclude_filenames")
+    # A brief that lists its deliverables (one per line, or separated by ";") gets the best proven
+    # precedent for each one, so the effort estimate covers what was asked and nothing twice.
+    items = [x.strip() for x in re.split(r"[;\n]", brief["objective"]) if x.strip()]
+    if len(items) > 1:
+        picks = []
+        for item in items:
+            hits = find_components(f"deliverable for {item}", section="deliverable", product=product,
+                                   k=12, exclude_filenames=exclude)
+            best = next((h for h in hits if h["similarity"] >= MIN_SIMILARITY
+                         and h["component_id"] not in seen), None)
+            if best:
+                # Estimate from every past deal that delivered the same thing, not just the closest one.
+                same = [h for h in hits if _shape(h["body"]) == _shape(best["body"]) and h["effort"]]
+                if len(same) > 1:
+                    roles = {r for h in same for r in h["effort"]}
+                    best = {**best, "effort_basis": len(same),
+                            "effort": {r: statistics.median(float(h["effort"].get(r, 0)) for h in same) for r in roles}}
+                picks.append(best)
+                seen.add(best["component_id"])
+            else:
+                gaps.append(f"deliverable: {item[:60]}")
+        if picks:
+            chosen["deliverable"] = picks
     for section in SECTIONS:
+        if section == "deliverable" and len(items) > 1:
+            continue
         query = f"{section.replace('_', ' ')} for {brief['objective']}"
-        exclude = brief.get("exclude_filenames")
         hits = find_components(query, section=section, product=product,
                                pricing_model=brief.get("pricing_model") if section == "payment" else None,
                                k=PER_SECTION.get(section, 2) * 2, exclude_filenames=exclude)

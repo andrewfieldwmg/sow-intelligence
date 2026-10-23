@@ -38,17 +38,22 @@ def classify(text: str) -> str | None:
 def main():
     conn = connect("writer")
     with conn, conn.cursor() as cur:
-        cur.execute("""SELECT p.sow_id, p.page_no, p.text FROM page p
+        # Each chunk carries which deal and section it came from, so "Client A deliverables" can find a
+        # page that never names Client A. Context is searched and embedded but never quoted.
+        cur.execute("""SELECT p.sow_id, p.page_no, p.text,
+                              concat_ws(' | ', s.client_alias, array_to_string(s.products, ', '), s.sector)
+                       FROM page p JOIN sow s ON s.id = p.sow_id
                        WHERE NOT EXISTS (SELECT 1 FROM chunk c WHERE c.sow_id = p.sow_id)
                        ORDER BY p.sow_id, p.page_no""")
         rows, n = cur.fetchall(), 0
         idx = {}
-        for sow_id, page_no, text in rows:
+        for sow_id, page_no, text, deal in rows:
+            heading = text.strip().split("\n")[0][:80]
             for piece in splitter.split_text(text):
                 i = idx.get(sow_id, 0)
-                cur.execute("""INSERT INTO chunk (sow_id, page_no, chunk_index, clause_type, text)
-                               VALUES (%s,%s,%s,%s,%s)""",
-                            (sow_id, page_no, i, classify(piece), piece.strip()))
+                cur.execute("""INSERT INTO chunk (sow_id, page_no, chunk_index, clause_type, context, text)
+                               VALUES (%s,%s,%s,%s,%s,%s)""",
+                            (sow_id, page_no, i, classify(piece), f"{deal} | {heading}", piece.strip()))
                 idx[sow_id] = i + 1
                 n += 1
     print(f"Created {n} chunks")

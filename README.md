@@ -14,7 +14,7 @@ Search, check and draft Statements of Work from past contracts. A proof of conce
 October 2026 from the original POC (which ran on OpenAI): Claude for extraction, drafting and Q&A,
 local bge-small embeddings, PostgreSQL with pgvector, and an MCP server for Claude Desktop or Cursor.
 
-The demo runs on 18 fictional SOWs for invented clients (`demo/build_corpus.py`). No real customer data.
+The demo runs on 38 fictional SOWs for invented clients across financial services, retail, hospitality and other sectors, with full contract boilerplate and six supplier-funded investment SOWs (`demo/build_corpus.py`). No real customer data.
 
 ## Run it
 
