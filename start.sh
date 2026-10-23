@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Container entrypoint: local Postgres + pgvector, load the demo data, start the web app.
 set -euo pipefail
-export PGDATA="${PGDATA:-$HOME/pgdata}" PGHOST=/tmp PGPORT=5432
+export PGDATA="$HOME/pgdata" PGHOST=/tmp PGPORT=5432   # the base image sets PGDATA to a root-owned path
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
   initdb -U owner --auth=trust -D "$PGDATA" >/dev/null
 fi

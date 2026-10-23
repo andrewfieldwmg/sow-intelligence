@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
     && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -u 1000 user
 USER user
-ENV HOME=/home/user PATH=/home/user/venv/bin:/usr/lib/postgresql/16/bin:$PATH
+ENV HOME=/home/user PGDATA=/home/user/pgdata PATH=/home/user/venv/bin:/usr/lib/postgresql/16/bin:$PATH
 WORKDIR /home/user/app
 RUN python3 -m venv /home/user/venv
 COPY --chown=user requirements.txt requirements-app.txt ./
