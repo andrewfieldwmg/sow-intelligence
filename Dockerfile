@@ -14,4 +14,5 @@ COPY --chown=user . .
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" \
  && python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 EXPOSE 7860
-CMD ["./start.sh"]
+ENTRYPOINT []
+CMD ["bash", "./start.sh"]
