@@ -48,12 +48,13 @@ def main():
         rows, n = cur.fetchall(), 0
         idx = {}
         for sow_id, page_no, text, deal in rows:
-            heading = text.strip().split("\n")[0][:80]
+            first = text.strip().split("\n")[0]
+            heading = first if len(first) <= 60 and not re.match(r"\d+\.\d+\s", first) else ""   # a title, not a clause
             for piece in splitter.split_text(text):
                 i = idx.get(sow_id, 0)
                 cur.execute("""INSERT INTO chunk (sow_id, page_no, chunk_index, clause_type, context, text)
                                VALUES (%s,%s,%s,%s,%s,%s)""",
-                            (sow_id, page_no, i, classify(piece), f"{deal} | {heading}", piece.strip()))
+                            (sow_id, page_no, i, classify(piece), " | ".join(x for x in (deal, heading) if x), piece.strip()))
                 idx[sow_id] = i + 1
                 n += 1
     print(f"Created {n} chunks")

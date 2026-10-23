@@ -126,3 +126,51 @@ INVESTMENT_STRONG = [
 INVESTMENT_WEAK = [
     "Investment. No fees are payable. The Supplier will explore AI use cases with the Client's teams and share recommendations at the end of the engagement.",
 ]
+
+
+# Applied AI engagements. The strong versions are what a forward deployed team needs to get to
+# production and hand over; the weak versions are how pilots stall.
+def ai_acceptance(strong: bool) -> list[str]:
+    if strong:
+        return ["AI acceptance. A Deliverable that includes a model-based component is Accepted against the evaluation "
+                "thresholds in Schedule 3, measured on the agreed golden set of at least 200 cases held back from "
+                "development: task accuracy of at least 90%, correct escalation to a human on at least 98% of "
+                "out-of-policy cases, and no Severity 1 safety failure. Results must be reproducible from the evaluation "
+                "harness delivered with the Deliverable, and the Client may re-run it at any time during the test window."]
+    return ["AI acceptance. The AI solution will be accepted when the Client is satisfied with the quality of its responses."]
+
+
+def ai_governance(strong: bool, eu: bool, fsi: bool = False) -> list[str]:
+    if not strong:
+        return ["AI governance. The Supplier will use reasonable endeavours to ensure the AI solution produces accurate results."]
+    out = [
+        "AI governance: human oversight. The operating model in Schedule 5 lists the decisions the AI solution may take "
+        "without human review. Every other output is reviewed by a trained member of the Client's staff before it "
+        "affects a customer, and the Client can switch any automated decision back to human review at any time.",
+        "AI governance: model and data. Client Data is not used to train any third-party model. The Supplier will give "
+        "the Client at least 30 days' notice of any change to the underlying model version in production and will "
+        "re-run the evaluation suite, sharing the results, before the change goes live.",
+        "AI governance: outputs. The Supplier warrants that the solution meets the evaluation thresholds in Schedule 3 at "
+        "Acceptance. It does not warrant that every individual output will be accurate, and the Client remains "
+        "responsible for decisions it makes using the outputs.",
+    ]
+    if fsi:
+        out.append("AI governance: model risk. The Client will treat the solution as a model under its model risk "
+                   "management framework, consistent with PRA Supervisory Statement SS1/23. The Supplier will provide "
+                   "model documentation, evaluation results and monitoring metrics so the Client can validate the "
+                   "solution before go-live and monitor its performance afterwards.")
+    if eu:
+        out.append("AI governance: EU AI Act. The parties will assess together whether the solution is a high-risk AI "
+                   "system under Regulation (EU) 2024/1689. If it is, the Supplier will provide the technical "
+                   "documentation and logs the Client needs to meet its obligations as deployer.")
+    return out
+
+
+def knowledge_transfer(strong: bool) -> list[str]:
+    if strong:
+        return ["Knowledge transfer and exit criteria. The engagement ends when the exit criteria in Schedule 3 are met: "
+                "the Client's named engineers have (a) deployed a change to the production solution without Supplier "
+                "help, (b) run the evaluation suite and acted on its results, and (c) shipped a second use case from the "
+                "starter repository with Supplier review only. Supplier staffing steps down from the full team to one "
+                "advisory engineer once criteria (a) and (b) are met."]
+    return ["Knowledge transfer. The Supplier will hold handover sessions with the Client's team at the end of the engagement."]

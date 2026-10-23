@@ -12,7 +12,8 @@ CLAUSE_WORDS = {"exit_management": "exit plan", "termination": "terminat", "subc
                 "regulatory": "regulat", "acceptance": "accept", "indemnity": "indemnif", "insurance": "insurance",
                 "liability": "liabilit", "payment": "invoice", "ip": "intellectual property",
                 "data_protection": "personal data", "sla": "service level", "audit": "audit",
-                "non_solicitation": "solicit", "force_majeure": "force majeure"}
+                "non_solicitation": "solicit", "force_majeure": "force majeure",
+                "ai_governance": "ai governance", "knowledge_transfer": "knowledge transfer"}
 
 
 def embed(texts, query=False):
@@ -31,8 +32,9 @@ def extract_json(system, user, schema, name):
         term = re.search(r"start on (\d{4}-\d{2}-\d{2}) and end on (\d{4}-\d{2}-\d{2})", user)
         dates = list(term.groups()) if term else re.findall(r"\d{4}-\d{2}-\d{2}", user)
         cur = re.search(r"\b(GBP|EUR|USD) [\d,]+", user)
-        return {"client_alias": (re.search(r"Client [A-Z]", user) or [None])[0], "sector": "retail",
-                "size_band": "enterprise", "products": ["AEM"] if "AEM" in user else ["Target"],
+        return {"client_alias": (re.search(r"Client [A-Z]{1,2}\b", user) or [None])[0], "sector": "retail",
+                "size_band": "enterprise", "products": [p for p in ("Applied AI", "AEM Sites", "AEM Assets", "Journey Optimizer", "Analytics", "Target")
+                                if f"the {p} services" in user][:1] or ["AEM"],
                 "pricing_model": "investment" if "Supplier-funded investment" in user else "fixed_price" if val else "t_and_m",
                 "contract_value": float(val.group(1).replace(",", "")) if val else None,
                 "currency": cur.group(1) if cur else "GBP", "start_date": dates[0] if dates else None,
@@ -41,8 +43,10 @@ def extract_json(system, user, schema, name):
     for m in re.finditer(r"(?ms)^\d+\.\d+ (.+?)(?=^\d+\.\d+ |\Z)", user):   # a clause may wrap over lines
         body = " ".join(m.group(1).split())
         heading = body.split(".")[0].lower()             # a clause's own heading decides its type, as a reader would
+        if heading.startswith("investment"):                # supplier-funded terms count as payment
+            heading = "invoice"
         for ct, w in sorted(CLAUSE_WORDS.items(), key=lambda kv: kv[1] not in heading):
-            if w in body.lower():
+            if w in body.lower() or w in heading:
                 clauses.append({"clause_type": ct, "summary": body[:60], "key_value": None, "quote": body})
                 break
         sec = next((s for s, w in SECTION_WORDS.items() if w in body.lower()), None)

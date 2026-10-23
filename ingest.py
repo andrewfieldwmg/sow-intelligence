@@ -34,7 +34,8 @@ def read_pages(path) -> list[str]:
 
 
 def load_register() -> dict:
-    """register.csv is maintained by a person: filename,sector,proven,delivery_health,margin_band,csat"""
+    """register.csv is maintained by a person: filename,sector,proven,delivery_health,margin_band,csat,
+    and optionally converted (investments) and weeks_to_production (AI engagements)."""
     if not REGISTER_PATH.exists():
         return {}
     with open(REGISTER_PATH, newline="", encoding="utf-8") as f:
@@ -58,11 +59,14 @@ def main():
                 leak_check(t, aliases, f"{path.name} page {i}")
             reg = register.get(path.name, {})
             cur.execute(
-                """INSERT INTO sow (filename, file_sha256, sector, proven, delivery_health, margin_band, csat)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                """INSERT INTO sow (filename, file_sha256, sector, proven, delivery_health, margin_band, csat,
+                                   converted, weeks_to_production)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                 (path.name, digest, reg.get("sector") or None, reg.get("proven", "").lower() == "true",
                  reg.get("delivery_health") or None, reg.get("margin_band") or None,
-                 reg.get("csat") or None))
+                 reg.get("csat") or None,
+                 {"true": True, "false": False}.get((reg.get("converted") or "").lower()),
+                 reg.get("weeks_to_production") or None))
             sow_id = cur.fetchone()[0]
             cur.executemany("INSERT INTO page (sow_id, page_no, text) VALUES (%s, %s, %s)",
                             [(sow_id, i, t) for i, t in enumerate(pages, 1)])

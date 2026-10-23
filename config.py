@@ -23,7 +23,7 @@ SECTIONS = ["scope", "deliverable", "assumption", "out_of_scope", "staffing",
 CLAUSE_TYPES = ["termination", "exit_management", "payment", "acceptance", "liability", "indemnity",
                 "insurance", "ip", "sla", "data_protection", "confidentiality", "audit", "regulatory",
                 "subcontracting", "change_control", "non_solicitation", "dispute_resolution",
-                "force_majeure", "governing_law", "anti_bribery"]
+                "force_majeure", "governing_law", "anti_bribery", "ai_governance", "knowledge_transfer"]
 
 
 def connect(role: str = "writer"):

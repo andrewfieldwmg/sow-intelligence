@@ -33,9 +33,11 @@ def precedents(clause_type: str, sector: str | None = None) -> str:
 
 @mcp.tool()
 def contract_details(sow_id: int | None = None, expiring_within_days: int | None = None,
-                     product: str | None = None) -> str:
-    """Metadata and clause register for SOWs, filtered by id, expiry window or product."""
-    return _j(search.contract_details(sow_id, expiring_within_days, product))
+                     product: str | None = None, pricing_model: str | None = None,
+                     sector: str | None = None) -> str:
+    """SOW metadata and outcomes (health, margin, CSAT, converted, weeks to production), filtered by id,
+    expiry window, product, pricing model or sector. Full clause text only for a single SOW."""
+    return _j(search.contract_details(sow_id, expiring_within_days, product, pricing_model, sector))
 
 
 @mcp.tool()

@@ -1,4 +1,4 @@
-"""Builds the fictional demo corpus: 38 SOWs (Word and PDF) for invented clients, plus the alias
+"""Builds the fictional demo corpus: 48 SOWs (38 Adobe implementations, 10 Applied AI engagements) (Word and PDF) for invented clients, plus the alias
 map, the delivery register and a golden eval set whose answers are known by construction.
 
 Every company, person and number here is made up. Clause wording is illustrative, written to look
@@ -68,14 +68,28 @@ CLIENTS = [
     ("Yardley Learning Trust", "Yardley", "education", "smb"),
     ("Ashcombe Distribution", "Ashcombe", "logistics", "mid-market"),
     ("Felbridge Water", "Felbridge", "utilities", "enterprise"),
+    # Applied AI engagements: forward deployed engineers building production AI with the client's team.
+    ("Ferncliffe Bank plc", "Ferncliffe", "financial services", "enterprise"),
+    ("Oakhurst Insurance Group", "Oakhurst", "financial services", "enterprise"),
+    ("Mallory Lending Ltd", "Mallory", "financial services", "mid-market"),
+    ("Draycott Department Stores", "Draycott", "retail", "enterprise"),
+    ("Kinver Sportswear", "Kinver", "retail", "mid-market"),
+    ("Harbourlight Hotels", "Harbourlight", "hospitality", "enterprise"),
+    ("Eskdale Travel Group", "Eskdale", "hospitality", "mid-market"),
+    ("Penrose Health Partners", "Penrose", "healthcare", "enterprise"),
+    ("Vantor Logistik GmbH", "Vantor", "logistics", "enterprise"),
+    ("Ribblesdale Housing Association", "Ribblesdale", "public sector", "mid-market"),
 ]
-EU_CLIENTS = {"Felsham Pharma AG", "Tamsin Optics GmbH", "Arden Capital Markets", "Tolland Payments Ltd"}
+AI_FROM = 38                                              # clients from this index are Applied AI engagements
+EU_CLIENTS = {"Felsham Pharma AG", "Tamsin Optics GmbH", "Arden Capital Markets", "Tolland Payments Ltd",
+              "Vantor Logistik GmbH"}
 CONTACTS = ["Priya Natarajan", "Tom Ellery", "Sian Morgan", "Lukas Brandt", "Ana Ferreira", "Dev Malhotra",
             "Grace Okafor", "Owen Pryce"]
 # Delivery outcome per client index: mostly green, some amber, a few red.
 # Pre-sales "investment" engagements: no fee, funded by the Supplier to prove value and convert.
-INVESTMENT = {2, 9, 17, 24, 31, 37}
-HEALTH = {i: "red" for i in (4, 12, 15, 22, 30, 35)} | {i: "amber" for i in (1, 7, 10, 18, 20, 25, 28, 33)}
+INVESTMENT = {2, 9, 17, 24, 31, 37, 38, 41, 42, 45, 46}
+NOT_CONVERTED = {9, 24, 46}           # met their success criteria but the client didn't fund the next phase
+HEALTH = {i: "red" for i in (4, 12, 15, 22, 30, 35, 43)} | {i: "amber" for i in (1, 7, 10, 18, 20, 25, 28, 33, 41, 45)}
 
 PRODUCTS = {
     "AEM Sites": {
@@ -131,7 +145,25 @@ PRODUCTS = {
                         "The Client's ESP domains are warmed before go-live."],
         "out_of_scope": ["SMS channel set-up.", "Decommissioning of the previous email platform."],
     },
+    "Applied AI": {
+        "deliverables": [
+            ("production AI agent for {n} customer-service intents, integrated with the Client's CRM and knowledge base through approved tool calls", {"architect": 40, "fde": 360, "qa": 60}),
+            ("evaluation harness and a golden set of at least 200 labelled cases, run on every change and before any model version change", {"fde": 120, "consultant": 40}),
+            ("guardrails, escalation to human agents and audit logging for every model-assisted decision", {"architect": 30, "fde": 140, "qa": 40}),
+            ("document extraction pipeline for {n} document types, with confidence scores and human review below the agreed threshold", {"fde": 240, "qa": 50}),
+            ("enablement programme pairing Supplier engineers with {n} Client engineers, with a starter repository and a playbook for the next use case", {"fde": 100, "consultant": 40}),
+        ],
+        # Strong deals secure data access and a product owner up front; weak deals don't.
+        "assumptions": ["The Client provides read access to a representative, de-identified sample of production data in a sandbox by the end of week two.",
+                        "The Client names a product owner with authority to make scope decisions, available at least two days a week.",
+                        "Model usage is billed to the Client directly under its own model provider agreement and is not included in the Charges.",
+                        "Subject-matter experts label the golden set of evaluation cases within the first three weeks.",
+                        "The Client's security review of the solution architecture completes within ten working days of submission."],
+        "out_of_scope": ["Fine-tuning or training of models.", "Ongoing model usage costs.",
+                         "Organisation-wide change management beyond the pilot team."],
+    },
 }
+ADOBE = [k for k in PRODUCTS if k != "Applied AI"]
 
 # ---- Sector and general clause libraries: strong versions first, weak versions second ----------
 FSI_REGULATORY_STRONG = [
@@ -176,6 +208,7 @@ SUBCONTRACTING_WEAK = [
     "Subcontracting: the Supplier may subcontract any part of the services at its discretion.",
 ]
 
+STAFFING_AI = "The Supplier will provide a forward deployed team of an engagement manager, an applied AI architect and {dev} forward deployed engineers, working on site with the Client's engineers at least three days a week."
 STAFFING = "The Supplier will provide a delivery team of an engagement manager, a solution architect and {dev} developers, with QA support as needed."
 GOVERNANCE = "Weekly status meetings review progress, RAID and budget, and a monthly steering committee with the Client sponsor approves changes to priorities."
 CHANGE = "Any change to scope, timeline or fees is handled through a written change request, assessed by the Supplier within five working days and approved by both parties before work starts."
@@ -190,17 +223,24 @@ def _letters(i):
     return s
 
 
+# Letter pairs Postgres drops as English stop words; an alias like "Client AS" would be unsearchable.
+STOP = {"AM", "AN", "AS", "AT", "BE", "BY", "DO", "HE", "IF", "IN", "IS", "IT", "ME", "MY", "NO", "OF", "ON",
+        "OR", "SO", "TO", "UP", "US", "WE"}
+ALIASES = [a for a in (_letters(k) for k in range(80)) if a not in STOP]
+
+
 def build():
     (OUT / "sows").mkdir(parents=True, exist_ok=True)
     aliases, register, golden, facts = [], [], [], []
     for i, (name, short, sector, size) in enumerate(CLIENTS):
-        alias = f"Client {_letters(i)}"
+        alias = f"Client {ALIASES[i]}"
         aliases.append((name, alias))
         if short:
             aliases.append((short, alias))
         health = HEALTH.get(i, "green")
         strong = health == "green" or (health == "amber" and i % 2 == 0)
-        product = list(PRODUCTS)[i % len(PRODUCTS)]
+        ai = i >= AI_FROM
+        product = "Applied AI" if ai else ADOBE[i % len(ADOBE)]
         p = PRODUCTS[product]
         year = 2022 + i % 4
         start = date(year, 1 + (i * 5) % 12, 1)
@@ -215,7 +255,7 @@ def build():
             hrs = {r: round(h * scale) for r, h in eff.items()}
             for r, h in hrs.items():
                 effort_total[r] = effort_total.get(r, 0) + h
-            role_txt = ", ".join(f"{r.upper() if len(r) <= 2 else r.title()} {h}h" for r, h in hrs.items())
+            role_txt = ", ".join(f"{r.upper() if len(r) <= 3 else r.title()} {h}h" for r, h in hrs.items())
             del_lines.append(f"The Supplier will deliver: {text.format(n=n)} (estimated effort: {role_txt}).")
         pm = round(sum(effort_total.values()) * rng.choice([0.10, 0.12, 0.15]))
         effort_total["pm"] = pm
@@ -257,7 +297,12 @@ def build():
             sched = None
             payment = (f"Payment. Time and materials are invoiced monthly in arrears against approved timesheets; "
                        f"invoices are payable within {rng.choice([30, 45, 60])} days of receipt.")
-        base_assumptions = [f"Assumption: {a}" for a in rng.sample(p["assumptions"], k=min(2, len(p["assumptions"])))]
+        if ai:
+            picked = (p["assumptions"][:2] + rng.sample(p["assumptions"][2:], k=1) if strong
+                      else rng.sample(p["assumptions"][2:], k=2))
+        else:
+            picked = rng.sample(p["assumptions"], k=min(2, len(p["assumptions"])))
+        base_assumptions = [f"Assumption: {a}" for a in picked]
         section3 = base_assumptions + extra_assumptions + [f"Out of scope: {p['out_of_scope'][0]}"]
         sla = rng.random() < (0.7 if strong else 0.3)
         eu = name in EU_CLIENTS
@@ -314,14 +359,16 @@ def build():
             ("3. Deliverables (Schedule 1)", num(3, del_lines)),
             ("4. Assumptions and exclusions", num(4, section3)),
             ("5. Staffing, governance and subcontracting", num(5, [
-                f"Key Personnel. The engagement manager and solution architect named in the mobilisation plan are Key Personnel. {STAFFING.format(dev=rng.choice([2, 3, 4]))} Engagement management is estimated at PM {pm}h.",
+                f"Key Personnel. The engagement manager and solution architect named in the mobilisation plan are Key Personnel. {(STAFFING_AI if ai else STAFFING).format(dev=rng.choice([2, 3, 4]))} Engagement management is estimated at PM {pm}h.",
                 f"Governance. {GOVERNANCE}"] + sector_clauses)),
             ("6. Charges and payment", num(6, [payment] + schedule2 + sla_txt + credits)),
-            ("7. Acceptance and non-conformity", num(7, bp.acceptance(strong))),
+            ("7. Acceptance and non-conformity", num(7, bp.acceptance(strong) + (bp.ai_acceptance(strong) if ai else []))),
             ("8. Change control", num(8, [f"Change control: {CHANGE}"])),
             ("9. Liability, indemnities and insurance", num(9, bp.liability(strong, rng.choice([1, 1.5, 2]), currency, rng.choice([1000000, 2000000, 5000000])))),
-            ("10. Data protection, confidentiality and compliance", num(10, bp.compliance(reg_clause + audit))),
-            ("11. Termination and exit", num(11, bp.termination_exit(strong, rng.choice([30, 60, 90]), sector == "financial services"))),
+            ("10. Data protection, confidentiality and compliance", num(10, bp.compliance(reg_clause + audit)
+                                                                          + (bp.ai_governance(strong, eu, sector == "financial services") if ai else []))),
+            ("11. Termination and exit", num(11, bp.termination_exit(strong, rng.choice([30, 60, 90]), sector == "financial services")
+                                             + (bp.knowledge_transfer(strong) if ai else []))),
             ("12. General", num(12, bp.general(strong, law, courts))),
             ("Signatures", [f"Signed for and on behalf of {bp.SUPPLIER[0]} by its authorised signatory.",
                             f"Signed for and on behalf of {name} by its authorised signatory.", bp.FOOTER]),
@@ -347,11 +394,19 @@ def build():
         register.append({"filename": fname, "sector": sector, "proven": str(health != "red").lower(),
                          "delivery_health": health,
                          "margin_band": {"green": "on", "amber": "below" if not strong else "on", "red": "below"}[health],
-                         "csat": {"green": rng.choice([9, 10]), "amber": rng.choice([7, 8]), "red": rng.choice([5, 6])}[health]})
+                         "csat": {"green": rng.choice([9, 10]), "amber": rng.choice([7, 8]), "red": rng.choice([5, 6])}[health],
+                         # Outcomes for pre-sales investments and AI engagements.
+                         "converted": (str(strong and health == "green" and i not in NOT_CONVERTED).lower()
+                                       if pricing == "investment" else ""),
+                         "weeks_to_production": ("" if not ai or health == "red" else
+                                                 rng.choice([6, 7, 8, 10]) if strong else rng.choice([14, 18, 22]))})
         if "regulatory" in tags:
             present.add("regulatory")
         if "subcontracting" in tags:
             present.add("subcontracting")
+        if ai:
+            present |= {"ai_governance", "knowledge_transfer"}
+            tags["ai"] = "strong" if strong else "weak"
         facts.append({"filename": fname, "sector": sector, "health": health, "clauses": present, **tags})
 
         golden.append({"type": "extraction", "filename": fname,
@@ -376,7 +431,7 @@ def build():
     for ct, sector in (("regulatory", "financial services"), ("acceptance", None),
                        ("payment", "retail"), ("subcontracting", "hospitality"),
                        ("exit_management", None), ("termination", "financial services"),
-                       ("audit", "financial services")):
+                       ("audit", "financial services"), ("ai_governance", None), ("knowledge_transfer", None)):
         golden.append({"type": "precedent", "clause_type": ct, "sector": sector,
                        "expect_files": [f["filename"] for f in facts
                                         if ct in f["clauses"] and (sector is None or f["sector"] == sector)]})

@@ -11,9 +11,11 @@ from answer import ask
 from assemble import draft_sow
 from config import CLAUSE_TYPES
 
-PRODUCTS = ["AEM Sites", "AEM Assets", "Target", "Analytics", "Journey Optimizer"]
+PRODUCTS = ["Applied AI", "AEM Sites", "AEM Assets", "Target", "Analytics", "Journey Optimizer"]
 INTRO = """# SOW Contract Intelligence (v2 demo)
-Search, check and draft Statements of Work from a library of **38 fictional SOWs** for invented clients.
+Search, check and draft Statements of Work from a library of **48 fictional SOWs** for invented clients:
+38 Adobe implementations and 10 Applied AI engagements run by forward deployed engineers, including
+supplier-funded pilots. The delivery register records how each deal went, and whether pilots converted.
 New drafts are assembled only from components of deals the delivery register marks as proven, and every
 paragraph cites its source. Nothing here is real customer data."""
 
@@ -46,9 +48,10 @@ def library():
     rows = search.contract_details()
     for r in rows:
         r["products"] = ", ".join(r["products"] or [])
-        r["clauses"] = ", ".join(sorted({c["clause_type"] for c in r["clauses"]}))
+        r["clauses"] = ", ".join(r["clause_types"])
     return _df(rows, ["filename", "client_alias", "sector", "products", "pricing_model", "contract_value",
-                      "currency", "start_date", "end_date", "proven", "delivery_health", "clauses"])
+                      "currency", "start_date", "end_date", "proven", "delivery_health", "converted",
+                      "weeks_to_production", "clauses"])
 
 
 def scores():
@@ -68,9 +71,13 @@ with gr.Blocks(title="SOW Contract Intelligence") as demo:
         q = gr.Textbox(label="Question", placeholder="Which SOWs have no liability cap? What's our usual notice period?")
         a = gr.Markdown()
         gr.Button("Ask", variant="primary").click(do_ask, q, a)
-        gr.Examples(["Which SOWs are missing a data protection clause?",
-                     "What payment terms do we usually agree?",
-                     "Which contracts include an audit right, and what notice does it need?"], q)
+        gr.Examples(["How should we define acceptance for an AI agent so it's commercially enforceable?",
+                     "What exit criteria hand an AI engagement over to the client's own engineers, and did they work?",
+                     "Which supplier-funded pilots converted to paid work, and what did their SOWs have in common?",
+                     "Why did some AI engagements take much longer to reach production?",
+                     "What are best-practice regulatory assumptions for financial services clients?",
+                     "What's the optimum payment schedule for fixed-price retail milestones?",
+                     "What subcontracting boilerplate do we use for hospitality clients?"], q)
     with gr.Tab("Clause coverage"):
         with gr.Row():
             ct = gr.Dropdown(CLAUSE_TYPES, value="liability", label="Clause type")

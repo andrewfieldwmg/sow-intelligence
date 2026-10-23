@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS sow (
     delivery_health TEXT,                          -- from register.csv: green / amber / red
     margin_band     TEXT,                          -- from register.csv: above / on / below target
     csat            NUMERIC,
+    converted       BOOLEAN,                       -- from register.csv: did a pre-sales investment convert to paid work
+    weeks_to_production INT,                       -- from register.csv: AI engagements, start to first live users
     extracted_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT now()
 );
@@ -65,7 +67,9 @@ CREATE TABLE IF NOT EXISTS chunk (
     clause_type TEXT,
     context     TEXT NOT NULL DEFAULT '',          -- "Client A | AEM Sites | 4. Assumptions": searchable, never cited
     text        TEXT NOT NULL,
-    tsv         tsvector GENERATED ALWAYS AS (to_tsvector('english', context || ' ' || text)) STORED,
+    -- Deal context is weighted above body text, so the client named in a question outranks common words.
+    tsv         tsvector GENERATED ALWAYS AS (setweight(to_tsvector('english', context), 'A')
+                                          || setweight(to_tsvector('english', text), 'B')) STORED,
     embedding   vector(384)
 );
 CREATE INDEX IF NOT EXISTS chunk_tsv_idx ON chunk USING gin (tsv);
