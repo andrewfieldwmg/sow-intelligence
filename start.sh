@@ -20,6 +20,7 @@ if [ "$(psql -U owner -d sow -tAc 'select count(*) from sow')" = "0" ]; then
       sh -c 'python ingest.py && python extract.py && python chunk.py'
   fi
   python embed.py
+  python llamaindex_search.py build      # second retrieval path, scored against the first in the evals
   psql -U owner -d sow -q -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO sow_reader"
 fi
 # Score the live system in the background; the Eval scores tab shows the result when it finishes.

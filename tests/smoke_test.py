@@ -51,7 +51,7 @@ check(cnt("SELECT count(*) n FROM chunk") == cnt("SELECT count(DISTINCT (sow_id,
 embed.main()
 check(cnt("SELECT count(*) n FROM pg_indexes WHERE indexname LIKE '%vec_idx'") == 2, "HNSW indexes built")
 
-hits = search.search_text("terminate for convenience notice", k=3)
+hits = search.search_text("terminate for convenience on written notice", k=3)
 check(hits and hits[0]["filename"] == "client_a_aem_2024.docx", f"hybrid search top hit: {hits[0]['filename']} p{hits[0]['page_no']}")
 missing = {r["filename"] for r in search.clause_coverage("liability")}
 check(missing == {"client_b_aem_2023.docx", "client_c_target_2023.pdf"}, f"coverage complete: {sorted(missing)}")

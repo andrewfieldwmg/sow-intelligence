@@ -35,8 +35,8 @@ def _df(rows, cols):
     return pd.DataFrame([{c: r.get(c) for c in cols} for r in rows], columns=cols)
 
 
-def do_ask(q):
-    return ask(q) if q.strip() else "Type a question."
+def do_ask(q, backend="Native (pgvector + SQL)"):
+    return ask(q, backend="llamaindex" if backend.startswith("LlamaIndex") else "native") if q.strip() else "Type a question."
 
 
 def do_coverage(clause_type, present):
@@ -87,6 +87,9 @@ def scores():
     lines = ["| Measure | Score | Target | Cases | Pass |", "|---|---|---|---|---|"]
     lines += [f"| {k.replace('_', ' ')} | {v['score']:.0%} | {v['target']:.0%} | {v['n']} | {'yes' if v['pass'] else 'no'} |"
               for k, v in r.get("scores", r).items()]
+    lat = r.get("latency_ms") or {}
+    if lat:
+        lines.append("\nMedian retrieval latency: " + ", ".join(f"{b} {ms:g} ms" for b, ms in lat.items()) + ".")
     return "\n".join(lines) + (f"\n\nRun on {r['run_at']} with {r['models']}." if "run_at" in r else "")
 
 
@@ -94,8 +97,10 @@ with gr.Blocks(title="SOW Contract Intelligence") as demo:
     gr.Markdown(INTRO)
     with gr.Tab("Ask"):
         q = gr.Textbox(label="Question", placeholder="Which SOWs have no liability cap? What's our usual notice period?")
+        rb = gr.Radio(["Native (pgvector + SQL)", "LlamaIndex (PGVectorStore + fusion)"],
+                      value="Native (pgvector + SQL)", label="Retrieval")
         a = gr.Markdown()
-        gr.Button("Ask", variant="primary").click(do_ask, q, a)
+        gr.Button("Ask", variant="primary").click(do_ask, [q, rb], a)
         gr.Examples(["How should we define acceptance for an AI agent so it's commercially enforceable?",
                      "What exit criteria hand an AI engagement over to the client's own engineers, and did they work?",
                      "Which supplier-funded pilots converted to paid work, and what did their SOWs have in common?",

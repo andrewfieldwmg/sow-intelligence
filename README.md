@@ -25,6 +25,12 @@ governance and enablement exit for Applied AI) copied verbatim from the stronges
 clauses, the top fixes before signing, and redlines built only from cited precedents. Uploads are
 sanitised and held in memory; they never enter the library.
 
+**Two retrieval paths.** `search.py` is hand-written hybrid search (pgvector plus Postgres full text, fused
+with reciprocal rank fusion in SQL). `llamaindex_search.py` answers the same calls with LlamaIndex: chunks
+as TextNodes with deal metadata in a PGVectorStore, a vector and a full-text retriever fused by
+QueryFusionRetriever. Both use the same embeddings and are scored on the same eval cases, with latency.
+The Ask tab can switch between them.
+
 ## Run it
 
 ```bash

@@ -10,14 +10,37 @@ Targets (the POC is "working" when all are met on the golden set):
 """
 import json
 import re
+import statistics
 import sys
+import time
 
 import search
 from assemble import draft_sow
 from review import review_sow
 
 TARGETS = {"extraction_accuracy": 0.95, "retrieval_hit_at_8": 0.90, "coverage_recall": 1.0, "precedent_recall": 0.95,
-           "draft_traceability": 1.0, "draft_industry_terms": 1.0, "review_accuracy": 0.9, "draft_effort_within_20pct": 0.80}
+           "draft_traceability": 1.0, "draft_industry_terms": 1.0, "review_accuracy": 0.9, "draft_effort_within_20pct": 0.80,
+           "open_retrieval_hit_at_8": 0.80, "llamaindex_retrieval_hit_at_8": 0.90,
+           "llamaindex_open_retrieval_hit_at_8": 0.80}
+# The LlamaIndex path is scored on the same cases when its index has been built.
+try:
+    import llamaindex_search
+except ImportError:
+    llamaindex_search = None
+LATENCY = {"native": [], "llamaindex": []}
+
+
+def _timed(backend, fn, *a, **kw):
+    t = time.perf_counter()
+    out = fn(*a, **kw)
+    LATENCY[backend].append((time.perf_counter() - t) * 1000)
+    return out
+
+
+def _backends():
+    yield "native", search.search_text
+    if llamaindex_search and search._rows(f"SELECT to_regclass('public.data_{llamaindex_search.TABLE}') AS t")[0]["t"]:
+        yield "llamaindex", llamaindex_search.search_text      # only once its index has been built
 
 
 def run(path="golden.jsonl") -> dict:
@@ -28,10 +51,13 @@ def run(path="golden.jsonl") -> dict:
             got = next((s for s in search.contract_details() if s["filename"] == c["filename"]), {})
             for field, want in c["expect"].items():
                 scores["extraction_accuracy"].append(str(got.get(field)) == str(want))
-        elif c["type"] == "retrieval":
-            hits = search.search_text(c["query"], k=8)
-            scores["retrieval_hit_at_8"].append(any(
-                h["filename"] == c["expect"]["filename"] and h["page_no"] == c["expect"]["page"] for h in hits))
+        elif c["type"] in ("retrieval", "open_retrieval"):
+            want = ({(c["expect"]["filename"], c["expect"]["page"])} if c["type"] == "retrieval"
+                    else {tuple(x) for x in c["expect_any"]})
+            for backend, fn in _backends():
+                hits = _timed(backend, fn, c["query"], k=8)
+                key = ("" if backend == "native" else "llamaindex_") + c["type"] + "_hit_at_8"
+                scores[key].append(any((h["filename"], h["page_no"]) in want for h in hits))
         elif c["type"] == "coverage":
             got = {r["filename"] for r in search.clause_coverage(c["clause_type"])}
             want = set(c["expect_missing"])
@@ -81,5 +107,6 @@ if __name__ == "__main__":
     if args.out:
         with open(args.out, "w") as f:
             json.dump({"scores": r, "run_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                       "latency_ms": {b: round(statistics.median(v), 1) for b, v in LATENCY.items() if v},
                        "models": f"{EXTRACT_MODEL} (extraction), {CHAT_MODEL} (drafting), {EMBED_MODEL} (embeddings)"}, f, indent=2)
     sys.exit(0 if all(v["pass"] for v in r.values()) else 1)

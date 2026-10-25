@@ -470,6 +470,7 @@ def build():
     with open(OUT / "register.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(register[0])); w.writeheader(); w.writerows(register)
     golden += review_samples()
+    golden += open_retrieval_cases()
     (OUT / "golden.jsonl").write_text("\n".join(json.dumps(g) for g in golden) + "\n")
     with open(OUT / "corpus_facts.json", "w") as f:      # ground truth for checking answers by hand
         json.dump([{**x, "clauses": sorted(x["clauses"])} for x in facts], f, indent=1)
@@ -538,6 +539,34 @@ def review_samples() -> list[dict]:
          "product": "Target", "pricing": "fixed_price",
          "expect_flagged": [], "expect_ok": ["indemnity", "insurance", "exit_management", "termination"]},
     ]
+
+
+# Paraphrased questions with no client name: a fairer test of the retrieval layer itself, used to
+# compare the hand-written retriever with the LlamaIndex one. Expected hits are found by phrase.
+OPEN_QUERIES = [
+    ("Which deals require ICT incident reporting for EU financial entities?", "DORA"),
+    ("Model risk management requirements for AI used by banks", "SS1/23"),
+    ("Subcontractors handling card payment data", "PCI DSS"),
+    ("Validating computerised systems in regulated pharma processes", "GAMP 5"),
+    ("Freedom of information obligations for public bodies", "Freedom of Information Act"),
+    ("No releases during the Christmas trading period", "peak trading freeze"),
+    ("Obligations for high-risk AI systems under EU regulation", "2024/1689"),
+    ("What happens if the client doesn't respond during acceptance testing?", "deemed Accepted"),
+    ("Financial penalties for missing hypercare response times", "service credit"),
+    ("Help moving the service to a new supplier after termination", "exit assistance"),
+    ("Client engineers able to ship a second use case without help", "second use case"),
+    ("Customer data must not be used to train models", "not used to train"),
+]
+
+
+def open_retrieval_cases() -> list[dict]:
+    pages = {f.name: [" ".join(t.split()).lower() for t in read_pages(f)] for f in sorted((OUT / "sows").iterdir())}
+    out = []
+    for q, phrase in OPEN_QUERIES:
+        expect = [[fn, n] for fn, ps in pages.items() for n, t in enumerate(ps, 1) if phrase.lower() in t]
+        if expect:
+            out.append({"type": "open_retrieval", "query": q, "expect_any": expect})
+    return out
 
 
 if __name__ == "__main__":
